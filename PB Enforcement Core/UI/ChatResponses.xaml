@@ -1,0 +1,194 @@
+﻿<UserControl x:Class="Advanced_PB_Limiter.UI.ChatResponses"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:Advanced_PB_Limiter.UI"
+             mc:Ignorable="d"
+             d:DesignHeight="Auto" d:DesignWidth="Auto" Background="White">
+    <UserControl.Resources>
+        <!-- ===== PB Enforcement Core :: light theme ===== -->
+        <SolidColorBrush x:Key="TextBrush" Color="#FF1F2937"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#FF6B7280"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF4338CA"/>
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#FFF7F8FA"/>
+        <SolidColorBrush x:Key="EdgeBrush" Color="#FFE1E4EA"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#FFDC2626"/>
+
+        <Style TargetType="{x:Type TabControl}">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabControl}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TabPanel Grid.Row="0" IsItemsHost="True" Margin="0,0,0,6"/>
+                            <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="0,1,0,0">
+                                <ContentPresenter ContentSource="SelectedContent"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type TabItem}">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabItem}">
+                        <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="0,0,0,2" Padding="14,8,14,8">
+                            <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="{x:Type TextBlock}">
+                                        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type TabItem}}}"/>
+                                        <Setter Property="FontSize" Value="14"/>
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="Transparent"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type TextBlock}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style TargetType="{x:Type CheckBox}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style TargetType="{x:Type RadioButton}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style TargetType="{x:Type Label}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        </Style>
+        <Style TargetType="{x:Type GroupBox}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+        </Style>
+        <Style TargetType="{x:Type TextBox}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+        </Style>
+
+        <ControlTemplate x:Key="CoreButtonTemplate" TargetType="{x:Type Button}">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}">
+                    <ContentPresenter.Resources>
+                        <Style TargetType="{x:Type TextBlock}">
+                            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
+                        </Style>
+                    </ContentPresenter.Resources>
+                </ContentPresenter>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.88"/></Trigger>
+                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.72"/></Trigger>
+                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Bd" Property="Opacity" Value="0.45"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+        <Style TargetType="{x:Type Button}">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Padding" Value="10,4,10,4"/>
+            <Setter Property="Template" Value="{StaticResource CoreButtonTemplate}"/>
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style x:Key="DangerButton" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="RowBackground" Value="White"/>
+            <Setter Property="AlternatingRowBackground" Value="{StaticResource SurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+            <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource EdgeBrush}"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="Padding" Value="6,6"/>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        
+        
+        
+
+    </UserControl.Resources>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="12" MaxWidth="760" HorizontalAlignment="Left">
+                <TextBlock Text="Chat messages" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"
+                           Text="Write what players are told. Words in curly brackets are filled in automatically; everything else is sent exactly as you type it. An empty box uses the default text. The grey line under each box shows an example."/>
+
+                <TextBlock Text="Sender name shown in chat" Margin="0,0,0,2"/>
+                <TextBox Text="{Binding ChatSenderName, UpdateSourceTrigger=PropertyChanged}" MaxLength="40" Padding="4" Margin="0,0,0,16"/>
+
+                <TextBlock Text="When a block gets an offence (a warning)" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                <CheckBox Content="Send this warning on every offence" IsChecked="{Binding WarnUserOnOffense}" Margin="0,0,0,6"/>
+                <TextBox x:Name="OffenceWarningBox" Text="{Binding OffenceWarningMessage, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="False" MinHeight="64" Padding="4" TextChanged="MessageBox_OnTextChanged"/>
+                <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Words you can use: {player} {grid} {block} {offence} {allowed} {limitType} {limit} {usage}"/>
+                <TextBlock x:Name="OffenceWarningPreview" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,2,0,4"/>
+                <Button Content="Reset to default" HorizontalAlignment="Left" Margin="0,0,0,16" Click="ResetOffenceWarning_OnClick"/>
+
+                <TextBlock Text="When a block is punished" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                <CheckBox Content="Send this message when a block is punished" IsChecked="{Binding SendPunishmentMessage}" Margin="0,0,0,6"/>
+                <TextBox x:Name="PunishmentBox" Text="{Binding PunishmentMessage, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="False" MinHeight="64" Padding="4" TextChanged="MessageBox_OnTextChanged"/>
+                <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Words you can use: {player} {grid} {block} {reason} {action} {details}   ({action} is turned off, damaged or destroyed; {details} lists the limit and usage)"/>
+                <TextBlock x:Name="PunishmentPreview" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,2,0,4"/>
+                <Button Content="Reset to default" HorizontalAlignment="Left" Margin="0,0,0,16" Click="ResetPunishment_OnClick"/>
+
+                <TextBlock Text="When a block is slowed down (Smart Enforcement throttle)" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                <CheckBox Content="Tell the owner when their block is slowed down" IsChecked="{Binding ThrottleNotifyOwner}" Margin="0,0,0,6"/>
+                <TextBox x:Name="ThrottleBox" Text="{Binding ThrottleMessage, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="False" MinHeight="64" Padding="4" TextChanged="MessageBox_OnTextChanged"/>
+                <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Words you can use: {player} {grid} {block}"/>
+                <TextBlock x:Name="ThrottlePreview" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,2,0,4"/>
+                <Button Content="Reset to default" HorizontalAlignment="Left" Margin="0,0,0,16" Click="ResetThrottle_OnClick"/>
+
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,10"
+                           Text="The message for blacklisted scripts is set in Main Settings > Script Blacklist. Changes here are saved automatically a moment after you stop typing."/>
+            </StackPanel>
+            </ScrollViewer>
+</UserControl>

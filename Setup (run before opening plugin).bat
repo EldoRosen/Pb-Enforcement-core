@@ -1,26 +1,22 @@
-:: This script creates a symlink to the game binaries to account for different installation directories on different systems.
-
+:: Creates folder links to the game and Torch binaries so the project can find its references.
 @echo off
-set /p path="Please enter the folder location of your SpaceEngineersDedicated.exe: "
-cd %~dp0
-rmdir GameBinaries > nul 2>&1
-mklink /J GameBinaries "%path%"
-if errorlevel 1 goto Error
-echo Done!
-goto End
-:Error
-echo An error occured creating the symlink.
-goto EndFinal
-:End
+cd /d "%~dp0"
 
-set /p path="Please enter the folder location of your Torch.Server.exe: "
-cd %~dp0
-rmdir TorchBinaries > nul 2>&1
-mklink /J TorchBinaries "%path%"
+set /p SEDIR="Folder that contains SpaceEngineersDedicated.exe (usually ...\Torch\DedicatedServer64): "
+rmdir GameBinaries >nul 2>&1
+mklink /J GameBinaries "%SEDIR%"
 if errorlevel 1 goto Error
-echo Done! You can now open the plugin without issue.
-goto EndFinal
-:Error2
-echo An error occured creating the symlink.
-:EndFinal
+
+set /p TORCHDIR="Folder that contains Torch.Server.exe (usually ...\Torch): "
+rmdir TorchBinaries >nul 2>&1
+mklink /J TorchBinaries "%TORCHDIR%"
+if errorlevel 1 goto Error
+
+echo Done! You can now build the plugin.
+goto End
+
+:Error
+echo An error occurred creating the folder link. Check the folder path and try again.
+
+:End
 pause

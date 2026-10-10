@@ -1,0 +1,557 @@
+﻿<UserControl x:Class="Advanced_PB_Limiter.UI.BasicSettings"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:Advanced_PB_Limiter.UI"
+             xmlns:settings="clr-namespace:Advanced_PB_Limiter.Settings"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:utils="clr-namespace:Advanced_PB_Limiter.Utils"
+             mc:Ignorable="d"
+             d:DesignHeight="Auto" d:DesignWidth="Auto" Background="White">
+    
+    <UserControl.Resources>
+        <ObjectDataProvider MethodName="GetValues" ObjectType="{x:Type sys:Enum}" x:Key="EnumDataProvider">
+            <ObjectDataProvider.MethodParameters>
+                <x:Type TypeName="utils:Enums+Punishment"/>
+            </ObjectDataProvider.MethodParameters>
+        </ObjectDataProvider>
+        <!-- ===== PB Enforcement Core :: light theme ===== -->
+        <SolidColorBrush x:Key="TextBrush" Color="#FF1F2937"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#FF6B7280"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF4338CA"/>
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#FFF7F8FA"/>
+        <SolidColorBrush x:Key="EdgeBrush" Color="#FFE1E4EA"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#FFDC2626"/>
+
+        <Style TargetType="{x:Type TabControl}">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabControl}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TabPanel Grid.Row="0" IsItemsHost="True" Margin="0,0,0,6"/>
+                            <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="0,1,0,0">
+                                <ContentPresenter ContentSource="SelectedContent"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type TabItem}">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabItem}">
+                        <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="0,0,0,2" Padding="14,8,14,8">
+                            <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="{x:Type TextBlock}">
+                                        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type TabItem}}}"/>
+                                        <Setter Property="FontSize" Value="14"/>
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="Transparent"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type TextBlock}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style TargetType="{x:Type CheckBox}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style TargetType="{x:Type RadioButton}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style TargetType="{x:Type Label}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        </Style>
+        <Style TargetType="{x:Type GroupBox}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+        </Style>
+        <Style TargetType="{x:Type TextBox}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+        </Style>
+
+        <ControlTemplate x:Key="CoreButtonTemplate" TargetType="{x:Type Button}">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}">
+                    <ContentPresenter.Resources>
+                        <Style TargetType="{x:Type TextBlock}">
+                            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
+                        </Style>
+                    </ContentPresenter.Resources>
+                </ContentPresenter>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.88"/></Trigger>
+                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.72"/></Trigger>
+                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Bd" Property="Opacity" Value="0.45"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+        <Style TargetType="{x:Type Button}">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Padding" Value="10,4,10,4"/>
+            <Setter Property="Template" Value="{StaticResource CoreButtonTemplate}"/>
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style x:Key="DangerButton" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="RowBackground" Value="White"/>
+            <Setter Property="AlternatingRowBackground" Value="{StaticResource SurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+            <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource EdgeBrush}"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="Padding" Value="6,6"/>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        
+    </UserControl.Resources>
+    <TabControl d:DataContext="{d:DesignInstance settings:Advanced_PB_LimiterConfig}">
+        <TabItem Header="Main Settings">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Enable:" Margin="3"/>
+                <CheckBox Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" IsChecked="{Binding Enabled}"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Enable or Disable the plugin" Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Debug Logging" Margin="3"/>
+                <CheckBox Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" IsChecked="{Binding DebugReporting}"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Shows some extra stuff that will fill your log file." Margin="3"/>
+                
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Turn off when owned by Nobody" Margin="3" VerticalAlignment="Center"/>
+                <CheckBox Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding TurnOffUnownedBlocks}"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="PB's with no owner can still run... but should they?" Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Auto Enable" Margin="3" VerticalAlignment="Center" />
+                <CheckBox Grid.Row="3" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding AllowSelfTurnOnExploit}"/>
+                <TextBlock Grid.Row="3" Grid.Column="2" Text="Players use the Save() function or ctor to turn on their pb automatically.  This runs regardless if the pb is enabled or not.  Uncheck this box to prevent that." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Auto Enable NPC" Margin="3" VerticalAlignment="Center" />
+                <CheckBox Grid.Row="4" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding AllowNPCToAutoTurnOn}"/>
+                <TextBlock Grid.Row="4" Grid.Column="2" Text="If Auto Enable for Players is checked, NPC will automatically be allowed.  Check this box to allow NPC programmable block Save() command to run.  Useful for custom operations on server!" Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="InstaKill Limit" Margin="3" VerticalAlignment="Center" Foreground="Red"/>
+                <TextBox Grid.Row="5" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding InstantKillThreshold}" TextAlignment="Center"/>
+                <TextBlock Grid.Row="5" Grid.Column="2" Text="Any pb that reaches this limit will be damaged beyond function immediately, regardless if no offences have previously occured.  No Graceful shutdown request will be sent.  Set to 0 to disable." Margin="3" TextWrapping="Wrap"/>
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Use SimTime" Margin="3" VerticalAlignment="Center"  />
+                <CheckBox Grid.Row="6" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding UseSimTime}" />
+                <TextBlock Grid.Row="6" Grid.Column="2" Text="Use SimTime will adjust the runtime for Sim Speed.  When sim speed tanks then the script running can also take longer to run at no fault of the player." Margin="3" TextWrapping="Wrap" />
+                
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="Use Game Time" Margin="3" VerticalAlignment="Center"  />
+                <CheckBox Grid.Row="7" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding UseGameReportedRuntime}" />
+                <TextBlock Grid.Row="7" Grid.Column="2" Text="Uses the reported runtime from the games internal runtime tracker itself, which is where pb scripts get their LastRuntimeMs reports from.  No further calculations are performed unless you enable Use SimTime." Margin="3" TextWrapping="Wrap" />
+                
+                <TextBlock Grid.Row="8" Grid.Column="0" Text="No Recompile On Restart" Margin="3" VerticalAlignment="Center" Foreground="Red"/>
+                <CheckBox Grid.Row="8" Grid.Column="1" VerticalAlignment="Center" Margin="3" IsChecked="{Binding RequireRecompileOnRestart}" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="8" Grid.Column="2" Text="Checking this will prevent pb's from being compiled during restart when turned off.  This means the player will have to click Recompile instead of Run.  This is best to prevent timers from enabling pb's.  This also means a button will not turn the pb on." Margin="3" TextWrapping="Wrap" />
+                
+                <TextBlock Grid.Row="9" Grid.Column="0" Text="Monitor Memory Usage" Margin="3" VerticalAlignment="Center" />
+                <CheckBox Grid.Row="9" Grid.Column="1" VerticalAlignment="Center" Margin="3" IsChecked="{Binding EnableMemoryMonitoring}" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="9" Grid.Column="2" Text="Enable/Disable the limiting and monitoring of memory usage." Margin="3" TextWrapping="Wrap" />
+                
+                <TextBlock Grid.Row="10" Grid.Column="0" Text="Defer Run Always" Margin="3" VerticalAlignment="Center" />
+                <CheckBox Grid.Row="10" Grid.Column="1" VerticalAlignment="Center" Margin="3" IsChecked="{Binding DeferRunAlways}" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="10" Grid.Column="2" Text="This will allow the pb to run Update1 only after your limit is reached to allow.... Always!" Margin="3" TextWrapping="Wrap" />
+                
+                <TextBlock Grid.Row="11" Grid.Column="0" Text="Defer Run On Sim Rate" Margin="3" VerticalAlignment="Center" />
+                <CheckBox Grid.Row="11" Grid.Column="1" VerticalAlignment="Center" Margin="3" IsChecked="{Binding DeferRunOnSimspeedRate}" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="11" Grid.Column="2" Text="This will allow Update1 to run after your limit is reached if sim speed falls below allowed rate." Margin="3" TextWrapping="Wrap" />
+                
+                <TextBlock Grid.Row="12" Grid.Column="0" Text="Defer Below SimRate" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="12" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding DeferRunBelowSimRate}" TextAlignment="Center"/>
+                <TextBlock Grid.Row="12" Grid.Column="2" Text="Set this between 0.0 and 1.0.  When the sim speed drops below this rate and Defer On SimRate is enabled, this will cause pb's to run less often." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="13" Grid.Column="0" Text="How Many Runs To Defer on" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="13" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding DeferRunCount}" TextAlignment="Center"/>
+                <TextBlock Grid.Row="13" Grid.Column="2" Text="How many times should the PB request to run before allowing it." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="14" Grid.Column="0" Text="Disable Update1" Margin="3" VerticalAlignment="Center" />
+                <CheckBox Grid.Row="14" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding DisableUpdate1}"/>
+                <TextBlock Grid.Row="14" Grid.Column="2" Text="Attaches Update1 to Update10 and only runs when Update10 would run.  No changes to the players scripts should be needed.  Update1 is rarely actually needed.  No script really needs to run 60 times per second." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="15" Grid.Column="0" Text="Max Memory per PB (in bytes)" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="15" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="75"  Text="{Binding PBMemoryThreshold}" TextAlignment="Center"/>
+                <TextBlock Grid.Row="15" Grid.Column="2" Text="Limit PB use of system memory (Prevents some script attacks against the server and shitty scripts from making the system unstable.  Set to 0 to ignore." Margin="3" TextWrapping="Wrap" />
+                
+                <TextBlock Grid.Row="16" Grid.Column="0" Text="Destroy Protected PB" Margin="3" VerticalAlignment="Center" />
+                <CheckBox Grid.Row="16" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding KillProtectedBlock}"/>
+                <TextBlock Grid.Row="16" Grid.Column="2" Text="Programmable Blocks in a SafeZone or other modded protected area with damage disabled wont receive any damage.  Enable this will cause the block to be have all its building materials removed and reset to an unwelded block." Margin="3" TextWrapping="Wrap"/>
+
+                <TextBlock Grid.Row="17" Grid.Column="0" Text="Ignore NPC blocks" Margin="3" VerticalAlignment="Center"/>
+                <CheckBox Grid.Row="17" Grid.Column="1" VerticalAlignment="Center" Margin="3" IsChecked="{Binding IgnoreNPCs}"/>
+                <TextBlock Grid.Row="17" Grid.Column="2" Text="Programmable blocks owned by NPCs are not tracked and never limited. Untick to measure and limit them like players' blocks." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="18" Grid.Column="0" Text="Startup Allowance for pb startup" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="18" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40"  Text="{Binding StartupAllowance}" TextAlignment="Center"/>
+                <TextBlock Grid.Row="18" Grid.Column="2" Text="Amount of time in seconds when block first starts to ignore its runtime." Margin="3" TextWrapping="Wrap" />
+                
+                
+                
+                <Button Grid.Row="28" Grid.Column="0" Grid.ColumnSpan="2" Margin="3" Content="Timings Burp" Name="TimingsBurp" Click="TimingBurp_OnClick"/>
+                <TextBlock Grid.Row="28" Grid.Column="2" Margin="3" Text="This shows the time to process various items in the log for 5 seconds."/>
+            </Grid>
+        </TabItem>
+        
+        <TabItem Header="Player Settings">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Graceful shutdown delay" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding GracefulShutDownRequestDelay}"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="How long to wait (in seconds) for the script to shutdown before the punishment is applied.  Use 0 for no delay.  Punishments are always applied after the delay." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Max runtime" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="3" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding MaxRunTimeMS}"/>
+                <TextBlock Grid.Row="3" Grid.Column="2" Text="Max amount of time (in milliseconds) a script is allowed to use before being issued any punishment.  Set to 0 for no limit." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Max runtime average" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="4" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding MaxRunTimeMSAvg}"/>
+                <TextBlock Grid.Row="4" Grid.Column="2" Text="Max amount of time (in milliseconds) a script is allowed to average before being issued any punishment.  Set to 0 for no limit." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Runs to track for Averaging" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="5" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding MaxRunsToTrack}"/>
+                <TextBlock Grid.Row="5" Grid.Column="2" Text="How many runs to use to calculate the runtime average." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Limit combined pb's" Margin="3" VerticalAlignment="Center"/>
+                <CheckBox Grid.Row="6" Grid.Column="1" VerticalAlignment="Center" Margin="3" HorizontalAlignment="Center" IsChecked="{Binding CheckAllUserBlocksCombined}"/>
+                <TextBlock Grid.Row="6" Grid.Column="2" Text="Track the total time of all running pb's owned by a player." Margin="3" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="Max combined runtime limit" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="7" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding MaxAllBlocksCombinedRunTimeMS}"/>
+                <TextBlock Grid.Row="7" Grid.Column="2" Text="Max amount of time (in milliseconds) of all the players pb's before punishing." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="8" Grid.Column="0" Text="Max combined runtime average" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="8" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding MaxAllBlocksCombinedRunTimeMSAvg}"/>
+                <TextBlock Grid.Row="8" Grid.Column="2" Text="Max amount of time (in milliseconds) all pb's owned by a user is allowed to average before being issued any punishment." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="9" Grid.Column="0" Text="Punish all combined pb's" Margin="3" VerticalAlignment="Center"/>
+                <CheckBox Grid.Row="9" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" IsChecked="{Binding PunishAllUserBlocksCombinedOnExcessLimits}"/>
+                <TextBlock Grid.Row="9" Grid.Column="2" Text="Enabled will apply the punishment to all the players active pb's.  Disabled will punish only the heaviest one." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="10" Grid.Column="0" Text="Allowed single block offenses" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="10" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding MaxOffencesBeforePunishment}"/>
+                <TextBlock Grid.Row="10" Grid.Column="2" Text="How many offences one programmable block can collect. The offence after that is punished." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="11" Grid.Column="0" Text="Allowed combined block offenses" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="11" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding MaxCombinedOffencesBeforePunishment}"/>
+                <TextBlock Grid.Row="11" Grid.Column="2" Text="How many combined-limit offences a player can collect. The offence after that is punished." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="12" Grid.Column="0" Text="Grace after offence" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="12" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding GraceAfterOffence}"/>
+                <TextBlock Grid.Row="12" Grid.Column="2" Text="Seconds after an offence before another offence can be incurred.  This prevents Update1 and Update10 from reaching offence limits and punishing any pb within 1 second of the first offence." Margin="3" TextWrapping="Wrap"/>
+                
+                
+                <TextBlock Grid.Row="14" Grid.Column="0" Text="Remove offense after time" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="14" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding OffenseDurationBeforeDeletion}"/>
+                <TextBlock Grid.Row="14" Grid.Column="2" Text="How many minutes before an offense is removed.  Each offense is tracked, so only after an offense is at least this old will it be removed." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="15" Grid.Column="0" Text="Clear data on pb recompile" Margin="3" VerticalAlignment="Center"/>
+                <CheckBox Grid.Row="15" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" IsChecked="{Binding ClearHistoryOnRecompile}"/>
+                <TextBlock Grid.Row="15" Grid.Column="2" Text="When a player recompiles their script, resets all tracking data to null." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="16" Grid.Column="0" Text="Keep inactive pb duration" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="16" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding RemoveInactivePBsAfterSeconds}"/>
+                <TextBlock Grid.Row="16" Grid.Column="2" Text="How long to keep inactive pb data, only useful for showing data.  Pb's removed from the game will be removed from tracking data regardless." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="17" Grid.Column="0" Text="Keep player data with no pb's" Margin="3" VerticalAlignment="Center"/>
+                <TextBox Name="RemovePlayersWithNoPbFrequency" Grid.Row="17" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding RemovePlayersWithNoPBFrequencyInMinutes}"/>
+                <TextBlock Grid.Row="17" Grid.Column="2" Text="Removes players from any reports when they have no pb's in game.  Set to 0 (zero) to never remove players." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="18" Grid.Column="0" Text="Punishment type" Margin="3" VerticalAlignment="Center"/>
+                <ComboBox Grid.Row="18" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="110" HorizontalAlignment="Left" ItemsSource="{Binding Source={StaticResource EnumDataProvider}}" SelectedItem="{Binding Punishment}"/>
+                <TextBlock Grid.Row="18" Grid.Column="2" Text="Turn off will disable the block.  Damage will applied the set amount of damage points to the block (may not occur in SafeZones.  Destroy will damage the pb to below functional level." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="19" Grid.Column="0" Text="Damage points" Margin="3"/>
+                <TextBox Grid.Row="19" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding PunishDamageAmount}" />
+                <TextBlock Grid.Row="19" Grid.Column="2" Text="The amount of points to apply to the pb when damage is selected." Margin="3" TextWrapping="Wrap"/>
+
+                
+                
+
+            </Grid>
+        </TabItem>
+        
+        <TabItem Header="Discord">
+            <StackPanel Margin="12" MaxWidth="720" HorizontalAlignment="Left">
+                <TextBlock Text="Discord offence reports" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"
+                           Text="Paste a channel webhook (Discord: Channel Settings > Integrations > Webhooks). Full reports are sent when you ask for one, from the buttons below or with the !PB SendOffenceReport command. Automatic alerts are set up in the section further down."/>
+
+                <TextBlock Text="Webhook URL" Margin="0,0,0,2"/>
+                <TextBox Text="{Binding DiscordWebhookUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" Padding="4"/>
+
+                <TextBlock Text="Sender name" Margin="0,0,0,2"/>
+                <TextBox Text="{Binding DiscordBotName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" Padding="4"/>
+
+                <TextBlock Text="Only list players with at least this many offences" Margin="0,0,0,2"/>
+                <TextBox Text="{Binding DiscordMinOffences, UpdateSourceTrigger=PropertyChanged}" Width="80" HorizontalAlignment="Left" Margin="0,0,0,14" Padding="4"/>
+
+                <Separator Margin="0,0,0,12"/>
+                <TextBlock Text="Automatic offence alerts" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,8"
+                           Text="Posts an alert to the webhook on its own when a player reaches the offence level below. Offences are counted over a rolling time window, and each player is reported at most once per cooldown. Changes are saved automatically."/>
+
+                <CheckBox Content="Send automatic offence alerts" IsChecked="{Binding DiscordAutoReportEnabled}" Margin="0,0,0,8"/>
+
+                <WrapPanel Margin="0,0,0,6">
+                    <TextBlock Text="Alert when a player has at least" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding DiscordAutoMinOffences, UpdateSourceTrigger=PropertyChanged}" Width="50" Padding="3" Margin="0,0,6,0"/>
+                    <TextBlock Text="offences within" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding DiscordAutoWindowMinutes, UpdateSourceTrigger=PropertyChanged}" Width="50" Padding="3" Margin="0,0,6,0"/>
+                    <TextBlock Text="minutes" VerticalAlignment="Center"/>
+                </WrapPanel>
+
+                <WrapPanel Margin="0,0,0,6">
+                    <TextBlock Text="Report the same player again only after" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding DiscordAutoCooldownMinutes, UpdateSourceTrigger=PropertyChanged}" Width="50" Padding="3" Margin="0,0,6,0"/>
+                    <TextBlock Text="minutes" VerticalAlignment="Center"/>
+                </WrapPanel>
+
+                <CheckBox Content="Always alert when a block is punished (including instant kills)" IsChecked="{Binding DiscordAutoReportOnPunish}" Margin="0,0,0,14"/>
+
+                <WrapPanel Margin="0,0,0,8">
+                    <Button x:Name="DiscordSendButton" Content="Send offence report" Margin="0,0,8,6" Click="DiscordSendReport_OnClick"/>
+                    <Button x:Name="DiscordTestButton" Content="Send test message" Margin="0,0,8,6" Click="DiscordTest_OnClick"/>
+                </WrapPanel>
+
+                <TextBlock x:Name="DiscordStatusText" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}"/>
+            </StackPanel>
+        </TabItem>
+        <TabItem Header="Script Blacklist">
+            <StackPanel Margin="12" HorizontalAlignment="Left" MaxWidth="900">
+                <TextBlock Text="Script blacklist" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,10"
+                           Text="Scripts listed here are switched off and cannot run on this server. A script is blocked when its fingerprint matches, or when it contains the text signature (a unique line from the script; it keeps working after the author updates the script). To capture a script from a live block, run !PB BlacklistScript &lt;block entity id&gt; in game. The entity id and fingerprint are written to the log whenever a script is punished."/>
+
+                <CheckBox Content="Block blacklisted scripts" IsChecked="{Binding ScriptBlacklistEnabled}" Margin="0,0,0,10"/>
+
+                <DataGrid x:Name="BlacklistGrid" AutoGenerateColumns="False" CanUserAddRows="True" CanUserDeleteRows="True"
+                          HeadersVisibility="Column" Height="220" Margin="0,0,0,10">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="150"/>
+                        <DataGridTextColumn Header="Fingerprint (SHA-256, min 12 characters)" Binding="{Binding Hash}" Width="270"/>
+                        <DataGridTextColumn Header="Text signature (min 8 characters)" Binding="{Binding Signature}" Width="220"/>
+                        <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <TextBlock Text="Message sent to the player  ({block}, {grid} and {script} are filled in)" Margin="0,0,0,2"/>
+                <TextBox Text="{Binding ScriptBlacklistMessage, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="False" MinHeight="54" Padding="4" Margin="0,0,0,10"/>
+
+                <WrapPanel Margin="0,0,0,8">
+                    <Button Content="Apply changes" Style="{StaticResource PrimaryButton}" Margin="0,0,8,6" Click="BlacklistApply_OnClick"/>
+                    <Button Content="Reload list" Margin="0,0,8,6" Click="BlacklistReload_OnClick"/>
+                    <Button Content="Reset message" Margin="0,0,8,6" Click="BlacklistResetMessage_OnClick"/>
+                </WrapPanel>
+
+                <TextBlock x:Name="BlacklistStatusText" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}"/>
+            </StackPanel>
+        </TabItem>
+        <TabItem Header="Smart Enforcement">
+            <StackPanel Margin="12" MaxWidth="720" HorizontalAlignment="Left">
+                <TextBlock Text="Smart enforcement" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"
+                           Text="Keep players' scripts running and only step in when they actually hurt the server. Scripts that use an extreme amount of time or memory (the instant-kill limits) are always stopped. Changes are saved automatically."/>
+
+                <CheckBox Content="Only enforce limits while the server is struggling" IsChecked="{Binding EnforceOnlyBelowSimThreshold}" Margin="0,0,0,8"/>
+                <WrapPanel Margin="0,0,0,6">
+                    <TextBlock Text="Struggling means sim speed below" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding EnforceOnlyBelowSimRate, UpdateSourceTrigger=PropertyChanged}" Width="50" Padding="3" Margin="0,0,6,0"/>
+                    <TextBlock Text="for at least" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding EnforceSustainedSeconds, UpdateSourceTrigger=PropertyChanged}" Width="50" Padding="3" Margin="0,0,6,0"/>
+                    <TextBlock Text="seconds" VerticalAlignment="Center"/>
+                </WrapPanel>
+
+                <WrapPanel Margin="0,10,0,6">
+                    <TextBlock Text="Ignore scripts that use less than" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding MinLoadMSPerSecondToPunish, UpdateSourceTrigger=PropertyChanged}" Width="50" Padding="3" Margin="0,0,6,0"/>
+                    <TextBlock Text="ms of server time per second (0 = off)" VerticalAlignment="Center"/>
+                </WrapPanel>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"
+                           Text="A script that takes 0.5 ms but runs only once every few seconds costs almost nothing, so it is left alone. A script that runs every tick is judged by its total cost."/>
+
+                <CheckBox Content="Slow a script down after an offence, before anything harsher happens" IsChecked="{Binding ThrottleBeforePunish}" Margin="0,0,0,8"/>
+                <WrapPanel Margin="0,0,0,6">
+                    <TextBlock Text="Limit its periodic runs to" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding ThrottleMaxRunsPerSecond, UpdateSourceTrigger=PropertyChanged}" Width="50" Padding="3" Margin="0,0,6,0"/>
+                    <TextBlock Text="runs per second, for" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding ThrottleDurationSeconds, UpdateSourceTrigger=PropertyChanged}" Width="50" Padding="3" Margin="0,0,6,0"/>
+                    <TextBlock Text="seconds after its last offence" VerticalAlignment="Center"/>
+                </WrapPanel>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}"
+                           Text="Only runs started by the script's own update frequency are slowed. Buttons, timers, other scripts and shutdown requests are never throttled. The owner is told when a script is slowed."/>
+            </StackPanel>
+        </TabItem>
+
+        <TabItem Header="Logging">
+            <StackPanel Margin="12" MaxWidth="720" HorizontalAlignment="Left">
+                <TextBlock Text="Plugin log file" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"
+                           Text="Every plugin message is written to its own file in the Logs folder next to Torch.Server.exe: PBEnforcementCore-yyyy-MM-dd.log. A new file starts each day."/>
+
+                <CheckBox Content="Write plugin messages to the daily log file" IsChecked="{Binding PluginLogToFile}" Margin="0,0,0,8"/>
+                <CheckBox Content="Keep routine messages out of the main Torch log (warnings and errors still appear in both)" IsChecked="{Binding PluginLogHideInfoInMainLog}" Margin="0,0,0,10"/>
+
+                <WrapPanel Margin="0,0,0,6">
+                    <TextBlock Text="Delete plugin log files older than" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding PluginLogKeepDays, UpdateSourceTrigger=PropertyChanged}" Width="50" Padding="3" Margin="0,0,6,0"/>
+                    <TextBlock Text="days" VerticalAlignment="Center"/>
+                </WrapPanel>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}"
+                           Text="The two tick boxes take effect straight away. Changes are saved automatically."/>
+            </StackPanel>
+        </TabItem>
+
+
+        <TabItem Header="Shared Settings">
+            <StackPanel Margin="12" MaxWidth="760" HorizontalAlignment="Left">
+                <TextBlock Text="Shared settings" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"
+                           Text="Use the same settings on several servers. They are stored in a local SQLite database file that every server can reach. While sharing is on, each server pulls the shared settings when it starts and when this window opens."/>
+
+                <CheckBox Content="Share settings between servers" IsChecked="{Binding SharedSettingsEnabled}" Margin="0,0,0,6"/>
+                <CheckBox Content="Push every change to the database automatically" IsChecked="{Binding SharedSettingsAutoPush}" Margin="0,0,0,12"/>
+
+                <TextBlock Text="Database file" Margin="0,0,0,2"/>
+                <DockPanel Margin="0,0,0,12" LastChildFill="True">
+                    <Button DockPanel.Dock="Right" Content="Browse..." Margin="8,0,0,0" Click="SharedBrowse_OnClick"/>
+                    <TextBox Text="{Binding SharedSettingsDatabasePath, UpdateSourceTrigger=PropertyChanged}" Padding="4"/>
+                </DockPanel>
+
+                <WrapPanel Margin="0,0,0,8">
+                    <Button Content="Push now" Style="{StaticResource PrimaryButton}" Margin="0,0,8,6" Click="SharedPush_OnClick"/>
+                    <Button Content="Pull now" Margin="0,0,8,6" Click="SharedPull_OnClick"/>
+                </WrapPanel>
+                <TextBlock x:Name="SharedStatusText" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"/>
+
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}"
+                           Text="Shared: all limits and options, the chat messages, privileged players and the script blacklist. Never shared, because they belong to one server: Enable, the Discord webhook, and these sharing settings. Push now and Pull now work even while sharing is switched off. The database path can be any folder on this machine; use a local drive, not a network share."/>
+            </StackPanel>
+        </TabItem>
+
+    </TabControl>
+</UserControl>

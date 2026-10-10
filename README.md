@@ -1,6 +1,40 @@
-# Advanced PB Limiter  
+﻿# PB Enforcement Core (v3.0.4)  
 
-## This is a full replacement for the current PB Limiter by HaE.  
+## Programmable block runtime and memory limiter for Torch (originally Advanced PB Limiter, a full replacement for the PB Limiter by HaE).  
+
+### Custom chat messages
+The warning, punishment and "slowed down" messages players receive, and the chat sender name, can be written by you in the **Chat Responses** tab, with automatic words such as `{grid}` and `{limit}` and an example preview.
+
+### First run and saving
+The first time this version starts, the plugin switches itself **off** once so you can review the settings before it limits anything (an orange banner offers **Turn on now**). Every setting change, including privileged players, is saved to `PB_Enforcement.cfg` automatically a moment after it is made.
+
+### Shared settings
+Settings can be shared between servers through a local SQLite database (default `C:/PBLimiter/settings.db`, chosen in **Main Settings > Shared Settings**). Servers pull the shared settings when they start and when the settings window opens; changes can be pushed automatically. Enable, the Discord webhook and the sharing settings themselves are never shared.
+
+### Manual
+See [MANUAL.md](MANUAL.md) for installation, how the plugin works, every setting and command, and a basic setup example.
+
+### Commands
+Every command starts with `!PB`, for example `!PB Help` (players) or `!PB AdminHelp` (staff).
+
+### Plugin log file
+All plugin messages go to their own daily file, `Logs\PBEnforcementCore-yyyy-MM-dd.log` (next to Torch.Server.exe), and routine messages are kept out of the main Torch log; warnings and errors still show in both. Change this in **Main Settings > Logging**. Old files are deleted after 30 days by default.
+
+### Why is a block off?
+Every time the plugin switches off, damages or blocks a programmable block it records why (and writes a warning to the log). `!PB RecentActions` shows the latest ones; `!PB RestoreBlocks` switches back on the blocks that were only turned off.
+
+### Smart enforcement
+The limiter is built to leave players' scripts alone unless they hurt the server (**Main Settings > Smart Enforcement**):
+- Limits only apply while sim speed has stayed below a threshold (default 0.9 for 10 seconds). Extreme usage (the instant-kill limits) is always stopped.
+- Scripts are judged by how much server time they use per second, so a script that is slow per run but runs rarely is not punished.
+- Optionally, a script that gets an offence is slowed down first (periodic runs only) instead of going straight to punishment.
+- When a player is over a combined limit, their heaviest block is punished, not a random one.
+
+### Script blacklist
+Block known-bad scripts from running on your servers. Add them in **Main Settings > Script Blacklist**, or in game with `!PB BlacklistScript <block entity id>` (blocks that exact script by fingerprint) or `!PB BlacklistSignature "<unique text>"` (blocks any script containing that text, so it survives script updates). Blocked blocks are switched off and the owner receives a configurable message. Use `!PB ListBlacklist`, `!PB UnblacklistScript <name>` `!PB ScriptFingerprint <block id>`, `!PB TopScripts [count]` (the heaviest scripts with their block ids) and `!PB TestBlacklist <block id>` (explains why a block is or is not blocked) to manage and check the list.
+
+### Discord offence reports
+Open the **Discord** tab, paste a channel webhook, and use the buttons, or run `!PB SendOffenceReport`. `!PB TestDiscordWebhook` sends a test message. The same tab can also post **automatic alerts** when a player reaches a set number of offences within a time window (with a per-player cooldown, and an option to always alert when a block is punished). Reports are sent only on request.
 
 ### Features  
 - Realtime time tracking only.
@@ -39,9 +73,6 @@ if (updateSource == UpdateType.Script)
 }
   ```
 
-### TODO:
-- Add support for Nexus, allowing controller plugins or other plugins/mods to issue commands or add/remove/manage privileged users.
-- UI still needs work.
-- Commands
-- Reporting methods
-- Possibly Discord Webhook integrations for reporting or other stuff...
+### TODO
+
+See [TODO.md](TODO.md) for the full roadmap.

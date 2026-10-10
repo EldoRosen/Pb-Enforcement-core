@@ -1,7 +1,7 @@
-<?xml version="1.0"?>
+﻿<?xml version="1.0"?>
 <PluginManifest xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <Name>Advanced PB Limiter</Name>
+  <Name>PB Enforcement Core</Name>
   <Guid>b8dd12fd-36b2-4bea-8f60-a5f7b649a6b9</Guid>
   <Repository>None</Repository>
-  <Version>v1.1.20</Version>
+  <Version>v3.0.4</Version>
 </PluginManifest>
