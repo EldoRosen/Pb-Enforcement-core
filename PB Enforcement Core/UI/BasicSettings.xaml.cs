@@ -26,6 +26,15 @@ namespace Advanced_PB_Limiter.UI
 
             BlacklistGrid.ItemsSource = _blacklistRows;
             LoadBlacklistRows();
+
+            // Live shared settings: show the connection status, and the blacklist when another server (or a command) changes it.
+            SharedLiveStatusText.Text = SharedSettingsManager.Status;
+            SharedSettingsManager.StatusChanged += () => Dispatcher.BeginInvoke(new Action(() => SharedLiveStatusText.Text = SharedSettingsManager.Status));
+            Config.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(Advanced_PB_LimiterConfig.ScriptBlacklist))
+                    Dispatcher.BeginInvoke(new Action(LoadBlacklistRows));
+            };
         }
 
         private void EndBurp()

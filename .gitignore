@@ -7,3 +7,5 @@ obj/
 .svn/
 .git/
 .vs/
+torch-path.txt
+build.log

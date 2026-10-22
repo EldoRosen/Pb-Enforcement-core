@@ -256,62 +256,39 @@ namespace Advanced_PB_Limiter.Manager
 
         private static JObject BuildPayload(List<Alert> alerts, out int playersUsed)
         {
-            string title = DiscordStyle.Title("Offence alert");
-            string description = DiscordStyle.Block(
-                DiscordStyle.Row("Trigger", "AUTOMATIC"),
-                DiscordStyle.Row("Players", alerts.Count.ToString()));
-
-            int used = title.Length + description.Length + 160; // 160 = footer allowance
-            JArray fields = new();
+            DiscordCard card = new(DiscordStyle.Orange);
+            card.Text(DiscordStyle.Header("🚨", "Offence alert", "automatic") + "\n" +
+                      $"{DiscordStyle.Plural(alerts.Count, "player")} crossed the alert limit.");
             playersUsed = 0;
 
             foreach (Alert alert in alerts)
             {
-                if (fields.Count >= DiscordManager.MaxFields) break;
-
                 List<string> lines = new();
-                string name;
                 lock (alert)
                 {
-                    if (alert.SteamId != 0) lines.Add(DiscordStyle.Row("Steam", alert.SteamId.ToString()));
-                    if (alert.OffenceCount > 0)
-                        lines.Add(DiscordStyle.Row("Offences", $"{alert.OffenceCount} IN LAST {alert.WindowMinutes} MIN"));
+                    lines.Add(DiscordStyle.PlayerHeading(alert.PlayerName, false));
+                    lines.Add(DiscordStyle.Inline(
+                        DiscordStyle.SteamLink(alert.SteamId),
+                        alert.OffenceCount > 0 ? $"**{DiscordStyle.Plural(alert.OffenceCount, "offence")}** in the last {alert.WindowMinutes} min" : ""));
 
-                    bool first = true;
                     foreach (string punished in alert.Punishments.Take(3))
-                    {
-                        lines.Add(first ? DiscordStyle.Row("Punished", punished) : DiscordStyle.Continued(punished));
-                        first = false;
-                    }
+                        lines.Add("> ⛔ " + DiscordManager.Escape(DiscordStyle.Clean(punished)));
 
                     foreach (KeyValuePair<long, BlockInfo> block in alert.Blocks.OrderByDescending(b => b.Value.Offences).Take(MaxBlocksPerPlayer))
-                    {
-                        string count = block.Value.Offences > 0 ? $"  x{block.Value.Offences}" : "";
-                        string id = block.Key != 0 ? $"  ID {block.Key}" : "";
-                        lines.Add(DiscordStyle.Bullet($"{block.Value.Grid} / {block.Value.Block}{count}{id}"));
-                    }
-
-                    name = DiscordManager.Truncate(DiscordStyle.FieldName(alert.PlayerName, false), 256);
+                        lines.Add(DiscordStyle.BlockLine(block.Value.Grid, block.Value.Block, block.Value.Offences, block.Key));
                 }
-                string body = DiscordStyle.Block(lines.ToArray());
-                if (playersUsed > 0 && used + name.Length + body.Length > DiscordManager.EmbedCharBudget) break;
+                lines.RemoveAll(string.IsNullOrEmpty);
 
-                used += name.Length + body.Length;
-                fields.Add(new JObject { ["name"] = name, ["value"] = body, ["inline"] = false });
+                string text = DiscordManager.Truncate(string.Join("\n", lines), 900);
+                if (!card.TryAdd(text))
+                {
+                    if (playersUsed > 0) break;
+                    card.Divider(large: true).Text(text); // always send at least one player, even if cut short
+                }
                 playersUsed++;
             }
 
-            JObject embed = new()
-            {
-                ["title"] = title,
-                ["description"] = description,
-                ["color"] = DiscordStyle.Orange,
-                ["timestamp"] = DateTime.UtcNow.ToString("o"),
-                ["footer"] = new JObject { ["text"] = DiscordManager.FooterText("Automatic alert // !PB BlacklistScript <block id> blocks a script") },
-                ["fields"] = fields
-            };
-
-            return DiscordManager.WrapPayload(embed);
+            return DiscordManager.WrapPayload(card, DiscordStyle.Footer("Block a script: `!PB BlacklistScript <block id>`"));
         }
     }
 }

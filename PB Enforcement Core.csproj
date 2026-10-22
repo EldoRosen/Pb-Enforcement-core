@@ -192,6 +192,7 @@
     </Compile>
     <Compile Include="PB Enforcement Core\PB_Enforcement_Core.cs" />
     <Compile Include="PB Enforcement Core\Settings\PB_Enforcement_CoreConfig.cs" />
+    <Compile Include="PB Enforcement Core\Settings\ConfigChangeNotification.cs" />
     <Compile Include="PB Enforcement Core\Settings\DiscordSettings.cs" />
     <Compile Include="PB Enforcement Core\Settings\LoggingSettings.cs" />
     <Compile Include="PB Enforcement Core\Settings\MessageSettings.cs" />

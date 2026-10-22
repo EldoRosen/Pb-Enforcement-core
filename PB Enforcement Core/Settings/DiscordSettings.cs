@@ -14,6 +14,13 @@ namespace Advanced_PB_Limiter.Settings
         private string _discordBotName = "PB Enforcement Core";
         public string DiscordBotName { get => _discordBotName; set => SetValue(ref _discordBotName, value ?? ""); }
 
+        private string _discordServerName = "";
+        /// <summary>
+        /// Shown on top of every Discord message, so servers that share one channel can be told apart.
+        /// Empty = the dedicated server's own name. Never shared, because it belongs to this server.
+        /// </summary>
+        public string DiscordServerName { get => _discordServerName; set => SetValue(ref _discordServerName, value ?? ""); }
+
         private int _discordMinOffences = 1;
         public int DiscordMinOffences { get => _discordMinOffences; set => SetValue(ref _discordMinOffences, value); }
 

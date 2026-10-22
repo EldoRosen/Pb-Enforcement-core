@@ -404,6 +404,11 @@
                 <TextBlock Text="Webhook URL" Margin="0,0,0,2"/>
                 <TextBox Text="{Binding DiscordWebhookUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" Padding="4"/>
 
+                <TextBlock Text="Server name" Margin="0,0,0,2"/>
+                <TextBox Text="{Binding DiscordServerName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,2" Padding="4"/>
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,10"
+                           Text="Shown on top of every message, so you can tell which server a report came from when several servers post to one channel. Leave empty to use the dedicated server's name. Not shared with other servers."/>
+
                 <TextBlock Text="Sender name" Margin="0,0,0,2"/>
                 <TextBox Text="{Binding DiscordBotName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" Padding="4"/>
 
@@ -531,15 +536,21 @@
             <StackPanel Margin="12" MaxWidth="760" HorizontalAlignment="Left">
                 <TextBlock Text="Shared settings" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
                 <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"
-                           Text="Use the same settings on several servers. They are stored in a local SQLite database file that every server can reach. While sharing is on, each server pulls the shared settings when it starts and when this window opens."/>
+                           Text="Use the same settings on several servers, live. They are kept in a local SQLite database file that every server can reach. While sharing is on, any change you make here is sent to the other servers within a few seconds, and their changes show up here the same way. When you switch sharing on, this server first takes the values already in the database."/>
 
-                <CheckBox Content="Share settings between servers" IsChecked="{Binding SharedSettingsEnabled}" Margin="0,0,0,6"/>
-                <CheckBox Content="Push every change to the database automatically" IsChecked="{Binding SharedSettingsAutoPush}" Margin="0,0,0,12"/>
+                <CheckBox Content="Share settings between servers (live)" IsChecked="{Binding SharedSettingsEnabled}" Margin="0,0,0,6"/>
+                <CheckBox Content="Send changes made on this server to the other servers straight away" IsChecked="{Binding SharedSettingsAutoPush}" Margin="20,0,0,4"/>
+                <CheckBox Content="Apply changes made on the other servers straight away" IsChecked="{Binding SharedSettingsAutoPull}" Margin="20,0,0,10"/>
+
+                <Border BorderBrush="{StaticResource MutedBrush}" BorderThickness="1" CornerRadius="4" Padding="8,6" Margin="0,0,0,12">
+                    <TextBlock x:Name="SharedLiveStatusText" TextWrapping="Wrap"/>
+                </Border>
 
                 <TextBlock Text="Database file" Margin="0,0,0,2"/>
                 <DockPanel Margin="0,0,0,12" LastChildFill="True">
                     <Button DockPanel.Dock="Right" Content="Browse..." Margin="8,0,0,0" Click="SharedBrowse_OnClick"/>
-                    <TextBox Text="{Binding SharedSettingsDatabasePath, UpdateSourceTrigger=PropertyChanged}" Padding="4"/>
+                    <!-- LostFocus: the path is used only once it is typed in full, not after every key -->
+                    <TextBox Text="{Binding SharedSettingsDatabasePath, UpdateSourceTrigger=LostFocus}" Padding="4"/>
                 </DockPanel>
 
                 <WrapPanel Margin="0,0,0,8">
@@ -549,7 +560,7 @@
                 <TextBlock x:Name="SharedStatusText" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"/>
 
                 <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}"
-                           Text="Shared: all limits and options, the chat messages, privileged players and the script blacklist. Never shared, because they belong to one server: Enable, the Discord webhook, and these sharing settings. Push now and Pull now work even while sharing is switched off. The database path can be any folder on this machine; use a local drive, not a network share."/>
+                           Text="Shared: all limits and options, the chat messages, privileged players and the script blacklist. Never shared, because they belong to one server: Enable, the Discord webhook and server name, and these sharing settings. If two servers change the same setting at the same moment, the last change wins. Push now sends every setting of this server; Pull now takes every shared setting, and both work even while sharing is off. The database path can be any folder on this machine; use a local drive, not a network share. All servers must run version 3.0.6 or newer."/>
             </StackPanel>
         </TabItem>
 

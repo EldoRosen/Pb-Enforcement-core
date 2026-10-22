@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Advanced_PB_Limiter.Utils;
-using Torch;
 
 namespace Advanced_PB_Limiter.Settings
 {
-    public partial class Advanced_PB_LimiterConfig : ViewModel
+    public partial class Advanced_PB_LimiterConfig // INotifyPropertyChanged: see ConfigChangeNotification.cs
     {
         private bool _Enabled = true;
         public bool Enabled { get => _Enabled; set => SetValue(ref _Enabled, value); }

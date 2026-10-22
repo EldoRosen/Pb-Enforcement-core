@@ -13,10 +13,6 @@ namespace Advanced_PB_Limiter.UI
 
         public Advanced_PB_LimiterControl()
         {
-            // The settings window is being created: bring in the shared settings first, so every tab shows them.
-            if (Config.SharedSettingsEnabled)
-                SharedSettingsManager.Pull("settings window opened");
-
             InitializeComponent();
 
             // Boxes read and show numbers in this server's own regional format. Without this, WPF always uses US English,
