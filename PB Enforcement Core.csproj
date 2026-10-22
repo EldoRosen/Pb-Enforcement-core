@@ -199,6 +199,7 @@
     <Compile Include="PB Enforcement Core\Settings\SharedSettingsSettings.cs" />
     <Compile Include="PB Enforcement Core\Settings\StartupSettings.cs" />
     <Compile Include="PB Enforcement Core\Settings\ScriptBlacklistSettings.cs" />
+    <Compile Include="PB Enforcement Core\Settings\SafetySettings.cs" />
     <Compile Include="PB Enforcement Core\UI\PB_Enforcement_CoreControl.xaml.cs">
       <DependentUpon>PB_Enforcement_CoreControl.xaml</DependentUpon>
     </Compile>

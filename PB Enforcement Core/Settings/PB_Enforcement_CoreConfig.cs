@@ -87,7 +87,9 @@ namespace Advanced_PB_Limiter.Settings
         private bool _TurnOffUnownedBlocks = true;
         public bool TurnOffUnownedBlocks { get => _TurnOffUnownedBlocks; set => SetValue(ref _TurnOffUnownedBlocks, value); }
         
-        private bool _useSimTime = true;
+        // No longer used (3.1): it divided run times by sim speed, so every script looked slower whenever the server lagged.
+        // Kept so existing config files still load.
+        private bool _useSimTime;
         public bool UseSimTime { get => _useSimTime; set => SetValue(ref _useSimTime, value); }
 
         private bool _requireRecompileOnRestart = false;
@@ -132,7 +134,8 @@ namespace Advanced_PB_Limiter.Settings
         private double _enforceOnlyBelowSimRate = 0.9;
         public double EnforceOnlyBelowSimRate {get => _enforceOnlyBelowSimRate; set => SetValue(ref _enforceOnlyBelowSimRate, value); }
 
-        private bool _useGameReportedRuntime = true;
+        // No longer used (3.1): run times are always measured by the plugin around the script call. Kept so config files still load.
+        private bool _useGameReportedRuntime;
         public bool UseGameReportedRuntime { get => _useGameReportedRuntime; set => SetValue(ref _useGameReportedRuntime, value); }
     }
 }

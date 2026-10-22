@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using Advanced_PB_Limiter.Settings;
 using Advanced_PB_Limiter.Utils;
@@ -35,13 +36,19 @@ namespace Advanced_PB_Limiter.Manager
                 long id = block.ProgrammableBlock?.EntityId ?? 0;
                 if (id == 0) return;
 
-                long until = Stopwatch.GetTimestamp() + (long)(Math.Max(1, Config.ThrottleDurationSeconds) * (double)Stopwatch.Frequency);
+                long now = Stopwatch.GetTimestamp();
+                long until = now + (long)(Math.Max(1, Config.ThrottleDurationSeconds) * (double)Stopwatch.Frequency);
+
+                // Expired throttles of blocks that never ran again (deleted, switched off) are only removed here.
+                if (States.Count > 500)
+                    foreach (KeyValuePair<long, State> entry in States)
+                        if (now > entry.Value.UntilTick) States.TryRemove(entry.Key, out _);
                 bool started = false;
                 States.AddOrUpdate(id,
                     _ => { started = true; return new State { UntilTick = until }; },
                     (_, existing) => { existing.UntilTick = until; return existing; });
 
-                if (started && Config.ThrottleNotifyOwner && player.SteamId != 0 && MySession.Static.Players.IsPlayerOnline(player.PlayerId))
+                if (started && Config.ThrottleNotifyOwner && player.SteamId != 0 && MySession.Static?.Players?.IsPlayerOnline(player.PlayerId) == true)
                     Chat.Send(ChatMessages.Throttle(player, block), player.SteamId, Color.Orange);
             }
             catch (Exception e)

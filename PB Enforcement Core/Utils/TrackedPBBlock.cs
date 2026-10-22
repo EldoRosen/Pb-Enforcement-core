@@ -16,44 +16,80 @@ namespace Advanced_PB_Limiter.Utils
         public MyProgrammableBlock? ProgrammableBlock { get; }
         private ConcurrentQueue<double> RunTimesMS { get; set; } = new ();
         public string GridName { get; }
-        private long PBStartTime { get; set; }
+        private long _pbStartTime;
         public ConcurrentQueue<long> Offences { get; private set; } = new();
         public int Recompiles { get; private set; }
         public double LastRunTimeMS { get; private set; }
         private double RunTimesSum { get; set; } = 0;
         public double PeekRunTimeMS { get; private set; } = 0;
         public long memoryUsage { get; private set; }
-        
+        /// <summary>How many memory scans in a row found this block over the memory limit (one high reading is not enough to punish).</summary>
+        public int ConsecutiveMemoryScansOver { get; private set; }
+
         private long _lastOffenceTick;
         public long LastOffenceTick
         {
-            get => _lastOffenceTick;
+            get => Interlocked.Read(ref _lastOffenceTick);
             set => Interlocked.Exchange(ref _lastOffenceTick, value);
         }
-        
+
         private long _lastUpdateTick;
+        /// <summary>When this block last ran (any run, including runs inside the startup allowance).</summary>
         public long LastUpdateTick
         {
             get => Interlocked.Read(ref _lastUpdateTick);
             set => Interlocked.Exchange(ref _lastUpdateTick, value);
         }
 
-        public void updateMemoryUsage(long bytes)
+        /// <summary>The block was removed from the world (its grid deleted, the block ground down, the grid left the server).</summary>
+        public bool IsGone => ProgrammableBlock is null || ProgrammableBlock.Closed || ProgrammableBlock.MarkedForClose;
+
+        /// <summary>
+        /// Notes that the block ran. Called for every run, also while the block is in its startup allowance: before 3.1 only
+        /// counted runs did this, so a block in its allowance looked inactive, was removed by the cleanup, came back with a
+        /// fresh allowance, and was never measured.
+        /// </summary>
+        public void Touch() => LastUpdateTick = Stopwatch.GetTimestamp();
+
+        public void updateMemoryUsage(long bytes, long threshold)
         {
             memoryUsage = bytes;
+            ConsecutiveMemoryScansOver = threshold > 0 && bytes > threshold ? ConsecutiveMemoryScansOver + 1 : 0;
         }
-        
+
         public void ResetMemoryUsage()
         {
             memoryUsage = 0;
+            ConsecutiveMemoryScansOver = 0;
         }
 
         public TrackedPBBlock(string gridName, MyProgrammableBlock pbBlock)
         {
             GridName = gridName;
-            PBStartTime = Stopwatch.GetTimestamp();
+            _pbStartTime = Stopwatch.GetTimestamp();
             ProgrammableBlock = pbBlock;
             LastUpdateTick = Stopwatch.GetTimestamp();
+        }
+
+        // ---- instant kill: runs over the instant-kill limit inside the last few seconds
+        private readonly Queue<long> _extremeSamples = new();
+
+        /// <summary>Remembers one run over the instant-kill limit and returns how many there were within the last windowSeconds.</summary>
+        public int RegisterExtremeSample(int windowSeconds)
+        {
+            long now = Stopwatch.GetTimestamp();
+            long oldest = now - (long)(windowSeconds * (double)Stopwatch.Frequency);
+            lock (_extremeSamples)
+            {
+                _extremeSamples.Enqueue(now);
+                while (_extremeSamples.Count > 0 && _extremeSamples.Peek() < oldest) _extremeSamples.Dequeue();
+                return _extremeSamples.Count;
+            }
+        }
+
+        private void ClearExtremeSamples()
+        {
+            lock (_extremeSamples) _extremeSamples.Clear();
         }
 
         // ---- load: how many milliseconds of server time this block uses per second
@@ -90,6 +126,10 @@ namespace Advanced_PB_Limiter.Utils
                 {
                     if (_loadWindowStart == 0) return 0;
                     double elapsed = (Stopwatch.GetTimestamp() - _loadWindowStart) / (double)Stopwatch.Frequency;
+
+                    // A block that stopped running (switched off, removed) must not keep its last window's load forever.
+                    if (elapsed > LoadWindowSeconds * 2) return 0;
+
                     double partial = elapsed >= 3 ? _loadWindowMs / elapsed : 0;
                     return System.Math.Max(_lastWindowLoad, partial);
                 }
@@ -101,6 +141,7 @@ namespace Advanced_PB_Limiter.Utils
 
         public void AddRuntimeData(double lastRunTimeMS, ulong steamId)
         {
+            Touch();
             if (IsUnderGracePeriod(steamId)) return;
             RecordLoad(lastRunTimeMS);
             lock (_statsLock)
@@ -108,19 +149,17 @@ namespace Advanced_PB_Limiter.Utils
                 if (lastRunTimeMS > PeekRunTimeMS)
                     PeekRunTimeMS = lastRunTimeMS;
                 LastRunTimeMS = lastRunTimeMS;
-                if (RunTimesMS.Count >= Config.MaxRunsToTrack)
-                    if (RunTimesMS.TryDequeue(out double oldRunTimeMS))
-                        RunTimesSum -= oldRunTimeMS;
+                while (RunTimesMS.Count >= System.Math.Max(1, Config.MaxRunsToTrack) && RunTimesMS.TryDequeue(out double oldRunTimeMS))
+                    RunTimesSum -= oldRunTimeMS;
 
                 RunTimesMS.Enqueue(lastRunTimeMS);
                 RunTimesSum += lastRunTimeMS;
             }
-            LastUpdateTick = Stopwatch.GetTimestamp();
         }
 
         /// <summary>
-        /// Forgets the run times that led to a punishment (offences, recompile count and the startup allowance stay as they are),
-        /// so the same old numbers cannot punish the block again while it is switched off.
+        /// Forgets the run times and offences that led to a punishment (recompile count and the startup allowance stay as they are),
+        /// so the same old numbers cannot punish the block again, and a block switched back on starts with a clean record.
         /// </summary>
         public void ResetAfterPunishment()
         {
@@ -136,36 +175,36 @@ namespace Advanced_PB_Limiter.Utils
                 _loadWindowMs = 0;
                 _lastWindowLoad = 0;
             }
+            Offences = new ConcurrentQueue<long>();
+            ClearExtremeSamples();
+            ConsecutiveMemoryScansOver = 0;
         }
-        
+
         public double[] GetRunTimesMS
         {
             get
             {
-                double[] runTimes = new double[RunTimesMS.Count];
-                int index = 0;
-
-                using IEnumerator<double> enumerator = RunTimesMS.GetEnumerator();
-                while (enumerator.MoveNext())
-                {
-                    runTimes[index++] = enumerator.Current;
-                }
-                return runTimes;
+                lock (_statsLock) return RunTimesMS.ToArray();
             }
         }
-        
+
+        /// <summary>The average that limits are checked against: 0 until MaxRunsToTrack runs have been collected.</summary>
         public double RunTimeMSAvg
         {
             get
             {
-                // If the queue doesnt have enough samples to calculate the average, return 0
-                if (RunTimesMS.Count < Config.MaxRunsToTrack)
-                    return 0;
-                
-                return RunTimesSum / RunTimesMS.Count;
+                lock (_statsLock)
+                {
+                    // If the queue doesnt have enough samples to calculate the average, return 0
+                    int samples = RunTimesMS.Count;
+                    if (samples == 0 || samples < System.Math.Max(1, Config.MaxRunsToTrack))
+                        return 0;
+
+                    return System.Math.Max(0, RunTimesSum / samples);
+                }
             }
         }
-        
+
         /// <summary>
         /// For display only (the live view): the average of the runs collected so far. <see cref="RunTimeMSAvg"/> stays 0 until
         /// MaxRunsToTrack runs have been collected, which kept slow scripts at 0 in the live view for minutes. Limits still use RunTimeMSAvg.
@@ -174,8 +213,11 @@ namespace Advanced_PB_Limiter.Utils
         {
             get
             {
-                int samples = RunTimesMS.Count;
-                return samples == 0 ? 0 : System.Math.Max(0, RunTimesSum / samples);
+                lock (_statsLock)
+                {
+                    int samples = RunTimesMS.Count;
+                    return samples == 0 ? 0 : System.Math.Max(0, RunTimesSum / samples);
+                }
             }
         }
 
@@ -194,16 +236,16 @@ namespace Advanced_PB_Limiter.Utils
                 return max;
             }
         }
-        
+
         public bool IsUnderGracePeriod(ulong SteamId)
         {
+            double age = Interlocked.Read(ref _pbStartTime).TicksTillNow_TimeSpan().TotalSeconds;
             if (Config.PrivilegedPlayers.TryGetValue(SteamId, out PrivilegedPlayer privilegedPlayer))
-                return PBStartTime.TicksTillNow_TimeSpan().TotalSeconds < privilegedPlayer.StartupAllowance;
-            
-            double result = PBStartTime.TicksTillNow_TimeSpan().TotalSeconds;
-            return result <= Config.StartupAllowance;
+                return age < privilegedPlayer.StartupAllowance;
+
+            return age <= Config.StartupAllowance;
         }
-        
+
         public void ClearRunTimes()
         {
             lock (_statsLock)
@@ -211,6 +253,7 @@ namespace Advanced_PB_Limiter.Utils
                 RunTimesMS = new ConcurrentQueue<double>();
                 LastRunTimeMS = 0;
                 RunTimesSum = 0;
+                PeekRunTimeMS = 0;
             }
             lock (_loadLock)
             {
@@ -219,10 +262,10 @@ namespace Advanced_PB_Limiter.Utils
                 _lastWindowLoad = 0;
             }
             Offences = new ConcurrentQueue<long>();
+            ClearExtremeSamples();
             Recompiles++;
-            PBStartTime = Stopwatch.GetTimestamp();
-            _lastUpdateTick = Stopwatch.GetTimestamp();
-            PeekRunTimeMS = 0;
+            Interlocked.Exchange(ref _pbStartTime, Stopwatch.GetTimestamp());
+            Touch();
         }
     }
 }

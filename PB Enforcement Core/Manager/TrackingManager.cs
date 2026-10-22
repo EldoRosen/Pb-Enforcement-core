@@ -1,26 +1,21 @@
 ﻿using System;
-using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using Advanced_PB_Limiter.Patches;
 using Advanced_PB_Limiter.Settings;
 using Advanced_PB_Limiter.Utils;
 using ExtensionMethods;
 using NLog;
-using NLog.Fluent;
 using Sandbox;
 using Sandbox.Game.Entities.Blocks;
-using Sandbox.Game.Entities.Cube;
+using Sandbox.Game.Multiplayer;
 using Sandbox.Game.World;
 using Sandbox.ModAPI;
-using Sandbox.ModAPI.Ingame;
-using VRage.Game.VisualScripting.Utils;
-using VRage.ModAPI;
+using VRageMath;
 using Timer = System.Timers.Timer;
 
 namespace Advanced_PB_Limiter.Manager
@@ -30,19 +25,22 @@ namespace Advanced_PB_Limiter.Manager
         private static Advanced_PB_LimiterConfig Config => Advanced_PB_Limiter.Instance!.Config!;
         public static ConcurrentDictionary<long,TrackedPlayer> PlayersTracked { get; } = new ();
         private static readonly Timer _cleanupTimer = new ();
-        private static readonly int _lastKnownCleanupInterval = Config.RemoveInactivePBsAfterSeconds;
         private static readonly Logger Log = LogManager.GetLogger("PB Enforcement Core => Tracking Manager");
         private static readonly ConcurrentDictionary<long, ProgramInfo> ProgrammablePrograms = new();
         private static readonly Timer _memoryCheckTimer = new (5000);
         private static readonly Timer _checkCombinedLimits = new (10000);
-        private static bool _checkCombinedLimitsRunning;
-        private static ConcurrentQueue<TrackingDataUpdateRequest> _trackingDataUpdateQueue = new();
+        private static int _checkCombinedLimitsRunning;
+        private static readonly ConcurrentQueue<TrackingDataUpdateRequest> _trackingDataUpdateQueue = new();
         private static readonly Timer _processUpdateRequests = new(16);
         private static int _processingRunning; // 1 while the queue is being worked through (an int so the check and the set are one atomic step)
         private const int MaxQueuedUpdates = 20000; // safety net: if the queue ever backs up, the oldest samples are dropped instead of memory growing forever
         private static long _lastProcessErrorTick;
-        private static bool _memoryCheckRunning = false;
-        private static Dictionary<long, int> _pbDeferTracker = new();
+        private static int _memoryCheckRunning;
+
+        /// <summary>Which player each tracked block was last seen with, so a block whose owner changes moves to the new owner.</summary>
+        private static readonly ConcurrentDictionary<long, long> BlockOwners = new();
+        /// <summary>Unowned blocks already queued to be switched off, so a block running every tick queues it once, not every run.</summary>
+        private static readonly ConcurrentDictionary<long, byte> UnownedQueued = new();
 
         private static readonly System.Timers.ElapsedEventHandler MemoryCheckHandler = (sender, args) => CheckInstanceMemoryUsages();
         private static readonly System.Timers.ElapsedEventHandler CombinedCheckHandler = (sender, args) => CheckAllUserBlocksForCombinedLimits();
@@ -57,7 +55,7 @@ namespace Advanced_PB_Limiter.Manager
             _memoryCheckTimer.Elapsed -= MemoryCheckHandler;
             _memoryCheckTimer.Elapsed += MemoryCheckHandler;
             _memoryCheckTimer.Start();
-            
+
             _checkCombinedLimits.Elapsed -= CombinedCheckHandler;
             _checkCombinedLimits.Elapsed += CombinedCheckHandler;
             _checkCombinedLimits.Start();
@@ -65,7 +63,7 @@ namespace Advanced_PB_Limiter.Manager
             _processUpdateRequests.Elapsed -= ProcessUpdatesHandler;
             _processUpdateRequests.Elapsed += ProcessUpdatesHandler;
             _processUpdateRequests.Start();
-            
+
             _cleanupTimer.Elapsed -= CleanupPlayersHandler;
             _cleanupTimer.Elapsed += CleanupPlayersHandler;
             // Always running: CleanUpOldPlayers does nothing while the setting is 0, so changing it later works without a restart.
@@ -82,100 +80,113 @@ namespace Advanced_PB_Limiter.Manager
             foreach (TrackedPlayer tracked in PlayersTracked.Values.ToList()) tracked.Stop();
             PlayersTracked.Clear();
             ProgrammablePrograms.Clear();
+            BlockOwners.Clear();
+            UnownedQueued.Clear();
             ScriptBlacklistManager.Reset();
             DiscordAutoReporter.Stop();
             ThrottleManager.Reset();
             BlockActionLog.Reset();
             ServerLoadMonitor.Reset();
+            PunishmentManager.Reset();
             ProfilerPatch_Torch.Reset();
             while (_trackingDataUpdateQueue.TryDequeue(out _)) { }
         }
-        
+
         public static List<TrackedPlayer> GetTrackedPlayerData()
         {
             return PlayersTracked.Values.ToList();
         }
-        
+
         public static TrackedPlayer? GetTrackedPlayerDataById(long playerId)
         {
-            return PlayersTracked.TryGetValue(playerId, out TrackedPlayer? player) 
-                ? player 
+            return PlayersTracked.TryGetValue(playerId, out TrackedPlayer? player)
+                ? player
                 : null;
+        }
+
+        /// <summary>Finds a tracked block whoever owns it.</summary>
+        public static TrackedPBBlock? FindTrackedBlock(long entityId)
+        {
+            if (BlockOwners.TryGetValue(entityId, out long ownerId) && PlayersTracked.TryGetValue(ownerId, out TrackedPlayer? owner))
+            {
+                TrackedPBBlock? block = owner.GetTrackedPB(entityId);
+                if (block != null) return block;
+            }
+
+            foreach (TrackedPlayer player in PlayersTracked.Values)
+            {
+                TrackedPBBlock? block = player.GetTrackedPB(entityId);
+                if (block != null) return block;
+            }
+            return null;
         }
 
         private static void CleanUpOldPlayers()
         {
-            if (!Config.Enabled) return;
-            if (Config.RemovePlayersWithNoPBFrequencyInMinutes <= 0) return; // 0 means "never remove"
-            
-            foreach (KeyValuePair<long, TrackedPlayer> entry in PlayersTracked.ToArray())
+            try
             {
-                TrackedPlayer tracked = entry.Value;
-                if (tracked.PBBlockCount > 0) continue;
-                if ((Stopwatch.GetTimestamp() - tracked.LastDataUpdateTick) / Stopwatch.Frequency / 60 < Config.RemovePlayersWithNoPBFrequencyInMinutes) continue;
-                RemovePlayer(entry.Key);
+                // Forget the owners of blocks nobody tracks any more (deleted or long inactive).
+                foreach (KeyValuePair<long, long> entry in BlockOwners.ToArray())
+                {
+                    if (!PlayersTracked.TryGetValue(entry.Value, out TrackedPlayer? owner) || owner.GetTrackedPB(entry.Key) == null)
+                        BlockOwners.TryRemove(entry.Key, out _);
+                }
+
+                if (!Config.Enabled) return;
+                if (Config.RemovePlayersWithNoPBFrequencyInMinutes <= 0) return; // 0 means "never remove"
+
+                foreach (KeyValuePair<long, TrackedPlayer> entry in PlayersTracked.ToArray())
+                {
+                    TrackedPlayer tracked = entry.Value;
+                    if (tracked.PBBlockCount > 0) continue;
+                    if ((Stopwatch.GetTimestamp() - tracked.LastDataUpdateTick) / Stopwatch.Frequency / 60 < Config.RemovePlayersWithNoPBFrequencyInMinutes) continue;
+                    RemovePlayer(entry.Key);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Warn(e, "Could not clean up old players.");
             }
         }
 
-        public static void UpdateTrackingData(MyProgrammableBlock? pb, double runTime)
+        public static void UpdateTrackingData(MyProgrammableBlock? pb, double runTime, long ownerId, bool gcAffected)
         {
+            if (pb == null) return;
             if (_trackingDataUpdateQueue.Count >= MaxQueuedUpdates) _trackingDataUpdateQueue.TryDequeue(out _);
-            _trackingDataUpdateQueue.Enqueue(new TrackingDataUpdateRequest{ProgBlock = pb, RunTime = runTime});
+            _trackingDataUpdateQueue.Enqueue(new TrackingDataUpdateRequest { ProgBlock = pb, RunTime = runTime, OwnerId = ownerId, GcAffected = gcAffected });
         }
-        
+
         private static void ProcessUpdateTrackingData()
         {
-            if (!Config.Enabled) return;
             if (_trackingDataUpdateQueue.IsEmpty) return;
+            if (!Config.Enabled || !Advanced_PB_Limiter.GameOnline)
+            {
+                // Runs queued before the plugin was switched off (or the session ended) are old news: if they were kept, switching
+                // the plugin back on later would judge blocks on runs from back then.
+                while (_trackingDataUpdateQueue.TryDequeue(out _)) { }
+                return;
+            }
+            if (MySession.Static?.Players == null) return; // the session is ending
             if (Interlocked.CompareExchange(ref _processingRunning, 1, 0) != 0) return; // the timer can fire again before the last pass ended
 
             try
             {
                 while (_trackingDataUpdateQueue.TryDequeue(out TrackingDataUpdateRequest data))
                 {
-                    long _trackTime = Stopwatch.GetTimestamp();
-                
-                    if (data.ProgBlock == null) continue;
-            
-                    if (data.ProgBlock.OwnerId == 0)
+                    try
                     {
-                        if (Config.TurnOffUnownedBlocks)
-                        {
-                            BlockActionLog.Record(data.ProgBlock, "Switched off", "the block has no owner and \"Turn off unowned blocks\" is on");
-                            MySandboxGame.Static.Invoke(()=>
-                            {
-                                data.ProgBlock.Enabled = false;
-                            }, "PB Enforcement Core");
-                        }
-                        continue; // this block is skipped; the rest of the queue still has to be worked through
-                    } // Track un-owned blocks? something to think about...
-        
-                    if (Config.IgnoreNPCs)
-                        if (MySession.Static.Players.IdentityIsNpc(data.ProgBlock.OwnerId)) continue;
-
-                    if (data.RunTime < 0)
-                        data.RunTime = 0;
-            
-                    if (!PlayersTracked.TryGetValue(data.ProgBlock.OwnerId, out TrackedPlayer? player) || player == null)
-                    {
-                        player = new TrackedPlayer(data.ProgBlock.OwnerId);
-                        PlayersTracked.TryAdd(data.ProgBlock.OwnerId, player);
+                        ProcessOne(data);
                     }
-            
-                    player.UpdatePBBlockData(data);
-
-                    if (Config.ShowTimingsBurp)
-                        Log.Info($"[{Advanced_PB_Limiter.Instance?.GetThreadName()} THREAD] Processed PB Tracking Data[{data.ProgBlock.CustomName}] in: {_trackTime.TicksTillNow_TimeSpan().TotalMilliseconds.ToString("N4", CultureInfo.InvariantCulture)}ms");
-                }
-            }
-            catch (Exception e)
-            {
-                // A timer swallows errors without a word. Report it (not on every tick); the next pass carries on with the rest of the queue.
-                long now = Stopwatch.GetTimestamp();
-                if (_lastProcessErrorTick == 0 || now - _lastProcessErrorTick >= 30 * Stopwatch.Frequency)
-                {
-                    _lastProcessErrorTick = now;
-                    Log.Error(e, "Could not process the programmable block run times.");
+                    catch (Exception e)
+                    {
+                        // A timer swallows errors without a word. Report it (not on every tick); the rest of the queue carries on.
+                        long now = Stopwatch.GetTimestamp();
+                        if (_lastProcessErrorTick == 0 || now - _lastProcessErrorTick >= 30 * Stopwatch.Frequency)
+                        {
+                            _lastProcessErrorTick = now;
+                            Log.Error(e, "Could not process a programmable block run time.");
+                        }
+                    }
                 }
             }
             finally
@@ -183,23 +194,99 @@ namespace Advanced_PB_Limiter.Manager
                 Interlocked.Exchange(ref _processingRunning, 0);
             }
         }
-        
+
+        private static void ProcessOne(TrackingDataUpdateRequest data)
+        {
+            long trackStart = Config.ShowTimingsBurp ? Stopwatch.GetTimestamp() : 0;
+            if (!Advanced_PB_Limiter.GameOnline) return; // the session ended mid-pass: a player created now would outlive it
+            MyProgrammableBlock? pb = data.ProgBlock;
+            if (pb == null || pb.Closed || pb.MarkedForClose) return;
+
+            long entityId = pb.EntityId;
+            long ownerId = data.OwnerId;
+
+            if (ownerId == 0)
+            {
+                ForgetOwner(entityId);
+                if (Config.TurnOffUnownedBlocks && UnownedQueued.TryAdd(entityId, 0))
+                {
+                    BlockActionLog.Record(pb, "Switched off", "the block has no owner and \"Turn off when owned by Nobody\" is on");
+                    MySandboxGame.Static.Invoke(() =>
+                    {
+                        try
+                        {
+                            if (!pb.Closed && pb.OwnerId == 0) pb.Enabled = false;
+                        }
+                        catch (Exception e)
+                        {
+                            Log.Warn(e, "Could not switch off an unowned programmable block.");
+                        }
+                        finally
+                        {
+                            UnownedQueued.TryRemove(entityId, out _);
+                        }
+                    }, "PB Enforcement Core");
+                }
+                return;
+            }
+
+            if (Config.IgnoreNPCs && MySession.Static.Players.IdentityIsNpc(ownerId))
+            {
+                ForgetOwner(entityId);
+                return;
+            }
+
+            if (data.RunTime < 0) data.RunTime = 0;
+
+            // The block changed owner: move it, with its history, to the new owner instead of tracking it twice.
+            TrackedPBBlock? moved = null;
+            if (BlockOwners.TryGetValue(entityId, out long previousOwner) && previousOwner != ownerId
+                && PlayersTracked.TryGetValue(previousOwner, out TrackedPlayer? previous))
+                previous.RemoveBlock(entityId, out moved);
+            BlockOwners[entityId] = ownerId;
+
+            TrackedPlayer player = GetOrCreatePlayer(ownerId);
+            if (moved != null) player.AdoptBlock(moved);
+            player.UpdatePBBlockData(data);
+
+            if (Config.ShowTimingsBurp)
+                Log.Info($"[{Advanced_PB_Limiter.Instance?.GetThreadName()} THREAD] Processed PB Tracking Data[{pb.CustomName}] in: {trackStart.TicksTillNow_TimeSpan().TotalMilliseconds.ToString("N4", CultureInfo.InvariantCulture)}ms");
+        }
+
+        private static TrackedPlayer GetOrCreatePlayer(long ownerId)
+        {
+            if (PlayersTracked.TryGetValue(ownerId, out TrackedPlayer? existing) && existing != null) return existing;
+
+            TrackedPlayer created = new(ownerId);
+            if (PlayersTracked.TryAdd(ownerId, created)) return created;
+
+            created.Stop(); // another thread added the player first: do not leave this one's timer running
+            return PlayersTracked[ownerId];
+        }
+
+        /// <summary>The block is no longer tracked under any player (it became unowned, or an NPC's while NPCs are ignored).</summary>
+        private static void ForgetOwner(long entityId)
+        {
+            if (BlockOwners.TryRemove(entityId, out long previousOwner) && PlayersTracked.TryGetValue(previousOwner, out TrackedPlayer? previous))
+                previous.RemoveBlock(entityId, out _);
+        }
+
         private static void RemovePlayer(long Id)
         {
             if (PlayersTracked.TryRemove(Id, out TrackedPlayer? removed)) removed?.Stop();
         }
-        
+
         public static void PBRecompiled(MyProgrammableBlock? pb)
         {
             if (!Config.Enabled) return;
             if (pb is null) return;
+            if (!Config.ClearHistoryOnRecompile) return;
 
-            if (!PlayersTracked.TryGetValue(pb.OwnerId, out TrackedPlayer? player)) return;
-            
-            if (Config.ClearHistoryOnRecompile)
+            long ownerId = BlockOwners.TryGetValue(pb.EntityId, out long known) ? known : pb.OwnerId;
+            if (PlayersTracked.TryGetValue(ownerId, out TrackedPlayer? player))
                 player.ResetPBBlockData(pb);
         }
-         
+
         /// <summary>The block using the most server time: the one to punish when a player is over a combined limit.</summary>
         private static TrackedPBBlock? HeaviestBlock(TrackedPlayer player, bool byAverage)
         {
@@ -209,7 +296,7 @@ namespace Advanced_PB_Limiter.Manager
             for (int i = 0; i < blocks.Count; i++)
             {
                 TrackedPBBlock? block = blocks[i];
-                if (block is null) continue;
+                if (block is null || block.IsGone) continue;
 
                 double value = block.LoadMSPerSecond > 0 ? block.LoadMSPerSecond : (byAverage ? block.RunTimeMSAvg : block.LastRunTimeMS);
                 if (value <= heaviestValue) continue;
@@ -219,127 +306,128 @@ namespace Advanced_PB_Limiter.Manager
             return heaviest;
         }
 
+        /// <summary>
+        /// Combined limits, every 10 seconds.
+        /// "Max combined runtime" is compared with the player's average server time per tick (all their blocks' load), not with
+        /// the sum of each block's last run: last runs happen on different ticks, so adding them up flagged players with many
+        /// light scripts. "Max combined runtime average" is compared with the sum of the blocks' run-time averages, as before.
+        /// One offence per pass at most, a chat warning only (scripts are no longer run with an argument), and after a punishment
+        /// the player's combined offences are cleared and they are left alone for a while, so one breach no longer switches
+        /// off their blocks one after another.
+        /// </summary>
         private static void CheckAllUserBlocksForCombinedLimits()
         {
             if (!Config.Enabled) return;
-            
             if (!Config.CheckAllUserBlocksCombined) return;
-            if (!ServerLoadMonitor.ShouldEnforce()) return;
-            
-            if (_checkCombinedLimitsRunning) return;
+            if (Interlocked.CompareExchange(ref _checkCombinedLimitsRunning, 1, 0) != 0) return;
 
             try
             {
-                _checkCombinedLimitsRunning = true;
-                
-                foreach(KeyValuePair<long, TrackedPlayer> trackedPlayer in PlayersTracked)
+                bool enforce = ServerLoadMonitor.ShouldEnforce();
+                double ticksPerSecond = 60.0 * Math.Max(0.1, Math.Min(1.0, Sync.ServerSimulationRatio));
+                double offenceMaxAge = OffenceWindowSeconds(Config.MaxCombinedOffencesBeforePunishment);
+                long now = Stopwatch.GetTimestamp();
+
+                foreach (TrackedPlayer player in PlayersTracked.Values)
                 {
-                   long _trackStart = Stopwatch.GetTimestamp();
-                    
-                    // clear old combined warnings
-                    for (int index = trackedPlayer.Value.CombinedOffences.Count - 1; index >= 0; index--)
+                    try
                     {
-                        if (trackedPlayer.Value.CombinedOffences[index].TicksTillNow_TimeSpan().TotalMinutes >= Config.OffenseDurationBeforeDeletion)
+                        long trackStart = Config.ShowTimingsBurp ? Stopwatch.GetTimestamp() : 0;
+                        player.PruneCombinedOffences(offenceMaxAge);
+                        if (!enforce) continue;
+                        if (now < Interlocked.Read(ref player.CombinedCooldownUntilTick)) continue;
+
+                        Config.PrivilegedPlayers.TryGetValue(player.SteamId, out PrivilegedPlayer? privilegedPlayer);
+                        if (privilegedPlayer?.NoCombinedLimits == true) continue;
+
+                        double allowedPerTick = privilegedPlayer?.CombinedRuntimeAllowance ?? Config.MaxAllBlocksCombinedRunTimeMS;
+                        double allowedAverage = privilegedPlayer?.CombinedRuntimeAverageAllowance ?? Config.MaxAllBlocksCombinedRunTimeMSAvg;
+
+                        double loadPerSecond = player.TotalLoadMSPerSecond;
+                        if (Config.MinLoadMSPerSecondToPunish > 0 && loadPerSecond < Config.MinLoadMSPerSecondToPunish) continue;
+
+                        double perTick = loadPerSecond / ticksPerSecond;
+                        double averageSum = player.TotalRunTimeMSAvg;
+
+                        PunishmentManager.PunishReason reason;
+                        string limitType;
+                        double limit, usage;
+                        bool byAverage;
+                        if (allowedPerTick > 0 && perTick > allowedPerTick)
                         {
-                            trackedPlayer.Value.CombinedOffences.Remove(trackedPlayer.Value.CombinedOffences[index]);
+                            reason = PunishmentManager.PunishReason.CombinedRuntimeOverLimit;
+                            limitType = "combined run-time per tick";
+                            limit = allowedPerTick;
+                            usage = perTick;
+                            byAverage = false;
                         }
-                    }
-
-                    if (Config.PrivilegedPlayers.TryGetValue(trackedPlayer.Value.SteamId, out PrivilegedPlayer? privilegedPlayer))
-                        if (privilegedPlayer.NoCombinedLimits) continue;
-
-                    double CombinedRuntimeAllowance = privilegedPlayer?.CombinedRuntimeAllowance ?? Config.MaxAllBlocksCombinedRunTimeMS;
-                    double CombinedRuntimeAverageAllowance = privilegedPlayer?.CombinedRuntimeAverageAllowance ?? Config.MaxAllBlocksCombinedRunTimeMSAvg;
-
-                    GetCombinedTotals(trackedPlayer.Value, out double totalMS, out double totalMSAvg);
-                    
-                    if (CombinedRuntimeAllowance != 0 && totalMS > CombinedRuntimeAllowance)
-                    {
-                        trackedPlayer.Value.CombinedOffences.Add(Stopwatch.GetTimestamp());
-                        
-                        if (trackedPlayer.Value.CombinedOffences.Count <= Config.MaxCombinedOffencesBeforePunishment)
+                        else if (allowedAverage > 0 && averageSum > allowedAverage)
                         {
-                            foreach (TrackedPBBlock? pbblocks in trackedPlayer.Value.GetAllPBBlocks)
-                            {
-                                MySandboxGame.Static.Invoke(() =>
-                                {
-                                    pbblocks.ProgrammableBlock?.Run("GracefulShutDown::-3", UpdateType.Script);
-                                }, "Advanced_PB_Limiter");
-                            }
+                            reason = PunishmentManager.PunishReason.CombinedAverageRuntimeOverLimit;
+                            limitType = "combined average run-time";
+                            limit = allowedAverage;
+                            usage = averageSum;
+                            byAverage = true;
+                        }
+                        else continue;
+
+                        // The same spacing as single-block offences.
+                        if ((now - player.LastCombinedOffenceTick) / (double)Stopwatch.Frequency <= Config.GraceAfterOffence) continue;
+
+                        TrackedPBBlock? heaviest = HeaviestBlock(player, byAverage);
+                        if (heaviest is null) continue;
+
+                        int count = player.AddCombinedOffence();
+                        int allowed = Config.MaxCombinedOffencesBeforePunishment;
+                        Log.Info($"Player {player.PlayerName} ({player.SteamId}) is over the {limitType} limit: {usage:0.0000}ms, allowed {limit:0.0000}ms. Combined offences: {count} of {allowed} allowed.");
+
+                        if (count <= allowed)
+                        {
+                            if (Config.WarnUserOnOffense)
+                                Chat.Send(ChatMessages.OffenceWarning(player, heaviest, count, allowed, limitType, limit, usage), player.SteamId, Color.Red);
                             continue;
                         }
-                        
+
+                        string notes = $"\nYour Limit: [{limit:0.0000}ms]\nYour Usage: [{usage:0.0000}ms]";
                         if (Config.PunishAllUserBlocksCombinedOnExcessLimits)
                         {
-                            foreach (TrackedPBBlock pbBlock in trackedPlayer.Value.GetAllPBBlocks)
-                                PunishmentManager.PunishPB(trackedPlayer.Value, pbBlock, PunishmentManager.PunishReason.CombinedRuntimeOverLimit);
+                            foreach (TrackedPBBlock pbBlock in player.GetAllPBBlocks)
+                                if (!pbBlock.IsGone) PunishmentManager.PunishPB(player, pbBlock, reason, null, notes);
                         }
                         else
                         {
-                            TrackedPBBlock? heaviest = HeaviestBlock(trackedPlayer.Value, false);
-                            if (heaviest != null)
-                                PunishmentManager.PunishPB(trackedPlayer.Value, heaviest, PunishmentManager.PunishReason.CombinedRuntimeOverLimit);
+                            PunishmentManager.PunishPB(player, heaviest, reason, null, notes);
                         }
-                    }
-                    
-                    if (CombinedRuntimeAverageAllowance != 0 && totalMSAvg > CombinedRuntimeAverageAllowance)
-                    {
-                        trackedPlayer.Value.CombinedOffences.Add(Stopwatch.GetTimestamp());
 
-                        if (trackedPlayer.Value.CombinedOffences.Count <= Config.MaxCombinedOffencesBeforePunishment)
-                        {
-                            foreach (TrackedPBBlock? pbblocks in trackedPlayer.Value.GetAllPBBlocks)
-                            {
-                                MySandboxGame.Static.Invoke(() =>
-                                {
-                                    pbblocks.ProgrammableBlock?.Run("GracefulShutDown::-3", UpdateType.Script);
-                                }, "Advanced_PB_Limiter");
-                            }
-                            continue;
-                        }
-                        
-                        if (Config.PunishAllUserBlocksCombinedOnExcessLimits)
-                        {
-                            foreach (TrackedPBBlock pbBlock in trackedPlayer.Value.GetAllPBBlocks)
-                                PunishmentManager.PunishPB(trackedPlayer.Value, pbBlock, PunishmentManager.PunishReason.CombinedAverageRuntimeOverLimit);
-                        }
-                        else
-                        {
-                            TrackedPBBlock? heaviest = HeaviestBlock(trackedPlayer.Value, true);
-                            if (heaviest != null)
-                                PunishmentManager.PunishPB(trackedPlayer.Value, heaviest, PunishmentManager.PunishReason.CombinedAverageRuntimeOverLimit);
-                        }
+                        player.ClearCombinedOffences();
+                        long cooldownTicks = (long)((Math.Max(0, Config.GraceAfterOffence) + 10) * (double)Stopwatch.Frequency);
+                        Interlocked.Exchange(ref player.CombinedCooldownUntilTick, now + cooldownTicks);
+
+                        if (Config.ShowTimingsBurp)
+                            Log.Info($"[{Advanced_PB_Limiter.Instance?.GetThreadName()} THREAD] Checked User Combined Usage[{player.PlayerName}] in: {trackStart.TicksTillNow_TimeSpan().TotalMilliseconds.ToString("N4", CultureInfo.InvariantCulture)}ms");
                     }
-                    
-                    if (Config.ShowTimingsBurp)
-                        Log.Info($"[{Advanced_PB_Limiter.Instance?.GetThreadName()} THREAD] Checked User Combined Usage[{trackedPlayer.Value.PlayerName}] in: {_trackStart.TicksTillNow_TimeSpan().TotalMilliseconds.ToString("N4", CultureInfo.InvariantCulture)}ms");
+                    catch (Exception e)
+                    {
+                        Log.Warn(e, $"Could not check the combined limits of {player.PlayerName}.");
+                    }
                 }
             }
             finally
             {
-                _checkCombinedLimitsRunning = false;
+                Interlocked.Exchange(ref _checkCombinedLimitsRunning, 0);
             }
         }
 
         /// <summary>
-        /// Adds up a player's last run times and averages. The buffers live in their own method on purpose: stackalloc memory is only
-        /// given back when the method ends, so inside the per-player loop it piled up and could overflow the stack on a big server.
+        /// How long an offence is remembered. At least "Remove offense after time", and long enough for the allowed offences plus
+        /// one to happen with "Grace after offence" between them (with the old defaults, 4 offences 15 s apart had to fit in
+        /// exactly 60 s, so any pause meant a heavy script was never punished).
         /// </summary>
-        private static void GetCombinedTotals(TrackedPlayer player, out double totalMS, out double totalMSAvg)
+        public static double OffenceWindowSeconds(int allowedOffences)
         {
-            totalMS = 0;
-            totalMSAvg = 0;
-
-            int count = player.PBBlockCount;
-            if (count == 0) return;
-
-            Span<double> runtimes = count <= 256 ? stackalloc double[count] : new double[count];
-            player.GetAllPBBlocksLastRunTimeMS(runtimes);
-            for (int index = runtimes.Length - 1; index >= 0; index--) totalMS += runtimes[index];
-
-            Span<double> averages = count <= 256 ? stackalloc double[count] : new double[count];
-            player.GetAllPBBlocksMSAvg(averages);
-            for (int index = averages.Length - 1; index >= 0; index--) totalMSAvg += averages[index];
+            double configured = Math.Max(0, Config.OffenseDurationBeforeDeletion) * 60.0;
+            double needed = (Math.Max(0, allowedOffences) + 1) * Math.Max(1, Config.GraceAfterOffence) + 30;
+            return Math.Max(configured, needed);
         }
 
         public static bool IsPBInstanceReferenceValid(long pbEntityID)
@@ -350,16 +438,9 @@ namespace Advanced_PB_Limiter.Manager
             return program != null;
         }
 
-        public static bool IsMemoryCheckInProgress(long entityID)
-        {
-            if (!ProgrammablePrograms.TryGetValue(entityID, out ProgramInfo? programmableProgram)) return false;
-
-            return Volatile.Read(ref programmableProgram.IsChecking) == 1;
-        }
-
         public static void AddPBInstanceReference(long entityID, ProgramInfo programInfo)
         {
-            ProgrammablePrograms.AddOrUpdate(entityID, programInfo, (l, info) => info);
+            ProgrammablePrograms.AddOrUpdate(entityID, programInfo, (l, info) => programInfo);
         }
 
         public static void RemovePBInstanceReference(long entityId)
@@ -367,71 +448,48 @@ namespace Advanced_PB_Limiter.Manager
             ProgrammablePrograms.TryRemove(entityId, out _);
         }
 
+        /// <summary>
+        /// Estimates each script's memory every 5 seconds. The scan only reads fields (it never calls the script's own code) and
+        /// never stops a script from running, so it runs on a background thread without holding the game up.
+        /// </summary>
         private static void CheckInstanceMemoryUsages()
         {
-            if (!Config.EnableMemoryMonitoring) return;
-            if (_memoryCheckRunning) return;
-            _memoryCheckRunning = true;
+            if (!Config.Enabled || !Config.EnableMemoryMonitoring) return;
+            if (Interlocked.CompareExchange(ref _memoryCheckRunning, 1, 0) != 0) return;
 
             try
             {
-                foreach (KeyValuePair<long,ProgramInfo> programInfo in ProgrammablePrograms)
+                foreach (KeyValuePair<long, ProgramInfo> programInfo in ProgrammablePrograms)
                 {
-                    if (Interlocked.CompareExchange(ref programInfo.Value.IsChecking, 1, 0) != 0)
-                        continue;
-
                     try
                     {
-                        if (!programInfo.Value.ProgramReference.TryGetTarget(out IMyGridProgram? program))
+                        MyProgrammableBlock? pb = programInfo.Value.PB;
+                        if (pb is null || pb.Closed || pb.MarkedForClose
+                            || !programInfo.Value.ProgramReference.TryGetTarget(out IMyGridProgram? program) || program == null)
                         {
                             RemovePBInstanceReference(programInfo.Key);
                             continue;
                         }
 
-                        if (program == null)
-                        {
-                            RemovePBInstanceReference(programInfo.Key);
-                            continue;
-                        }
-                    
-                        GetSize.OfAssembly(program, out long size, out long time);
+                        long size = GetSize.OfProgram(program, out long time, out bool complete);
                         if (Config.ShowTimingsBurp)
-                            Log.Info($"[{Advanced_PB_Limiter.Instance?.GetThreadName()} THREAD] Programmable Block=>[{programInfo.Value.PB.CustomName}] Size=>[{size} bytes] ScanTime=>[{TimeSpan.FromTicks(time).TotalMilliseconds}ms]");
-                    
+                            Log.Info($"[{Advanced_PB_Limiter.Instance?.GetThreadName()} THREAD] Programmable Block=>[{pb.CustomName}] Size=>[{size} bytes{(complete ? "" : ", scan stopped early")}] ScanTime=>[{time * 1000.0 / Stopwatch.Frequency:0.000}ms]");
+
                         programInfo.Value.LastUpdate = DateTime.Now;
 
-                        PlayersTracked.TryGetValue(programInfo.Value.OwnerID, out TrackedPlayer? trackedPlayer);
-                        TrackedPBBlock? block = null;
-                    
-                        if (trackedPlayer == null)
-                        {
-                            foreach (TrackedPlayer player in PlayersTracked.Values)
-                            {
-                                block = player.GetTrackedPB(programInfo.Value.PB.EntityId);
-                                if (block != null)
-                                    break;
-                            }
-                        }
-                        else
-                        {
-                            block = trackedPlayer.GetTrackedPB(programInfo.Key);
-                        }
-                    
-                        if (block == null) continue;
-                    
-                        block.updateMemoryUsage(size);
+                        TrackedPBBlock? block = FindTrackedBlock(programInfo.Key);
+                        block?.updateMemoryUsage(size, Config.PBMemoryThreshold);
                     }
-                    finally
+                    catch (Exception e)
                     {
-                        Interlocked.Exchange(ref programInfo.Value.IsChecking, 0);
+                        Log.Warn(e, "Could not measure the memory of a programmable block.");
                     }
                 }
             }
             finally
             {
-                _memoryCheckRunning = false;
+                Interlocked.Exchange(ref _memoryCheckRunning, 0);
             }
         }
     }
 }
-     

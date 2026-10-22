@@ -1,14 +1,14 @@
 ﻿using System;
-using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Timers;
+using System.Threading;
 using Advanced_PB_Limiter.Manager;
 using Advanced_PB_Limiter.Settings;
 using NLog;
 using Sandbox.Game.Entities.Blocks;
 using Sandbox.Game.World;
+using Timer = System.Timers.Timer;
 
 namespace Advanced_PB_Limiter.Utils
 {
@@ -24,51 +24,69 @@ namespace Advanced_PB_Limiter.Utils
         private readonly Timer _cleanupTimer = new (Math.Max(1, Config.RemoveInactivePBsAfterSeconds) * 1000);
         private int _lastKnownCleanupInterval = Config.RemoveInactivePBsAfterSeconds;
         public int Offences = 0;
-        public List<long> CombinedOffences = new();
-        
+
+        // ---- combined-limit offences (only touched by the combined check, guarded anyway)
+        private readonly List<long> _combinedOffences = new();
+        private long _lastCombinedOffenceTick;
+        /// <summary>After a combined punishment the player is left alone until this tick, so the next check does not punish the next block straight away.</summary>
+        public long CombinedCooldownUntilTick;
+
         public TrackedPlayer(long playerId)
         {
-            PlayerName = MySession.Static.Players.TryGetIdentity(playerId)?.DisplayName ?? "Unknown";
             PlayerId = playerId;
+            PlayerName = MySession.Static?.Players?.TryGetIdentity(playerId)?.DisplayName ?? "Unknown";
+            SteamId = MySession.Static?.Players?.TryGetSteamId(playerId) ?? 0;
+            LastDataUpdateTick = Stopwatch.GetTimestamp();
             _cleanupTimer.Elapsed += (sender, args) => CleanUpOldPBBlocks();
             _cleanupTimer.Start();
-            SteamId = MySession.Static.Players.TryGetSteamId(playerId);
         }
-        
+
         public int PBBlockCount => PBBlocks.Count;
 
         public TrackedPBBlock? GetTrackedPB(long entityId)
         {
-            return PBBlocks.TryGetValue(entityId, out TrackedPBBlock? trackedPBBlock) 
-                ? trackedPBBlock 
+            return PBBlocks.TryGetValue(entityId, out TrackedPBBlock? trackedPBBlock)
+                ? trackedPBBlock
                 : null;
         }
-        
+
+        /// <summary>Takes a block away from this player (its owner changed). Returns it, with its history, so the new owner can take it over.</summary>
+        public bool RemoveBlock(long entityId, out TrackedPBBlock? block) => PBBlocks.TryRemove(entityId, out block);
+
+        /// <summary>Takes over a block, with its history, from its previous owner.</summary>
+        public void AdoptBlock(TrackedPBBlock block)
+        {
+            if (block.ProgrammableBlock is null) return;
+            PBBlocks[block.ProgrammableBlock.EntityId] = block;
+        }
+
         public void UpdatePBBlockData(TrackingDataUpdateRequest data)
         {
             if (data.ProgBlock == null) return;
 
             // The name and Steam id are read once when the player is first tracked. If the game did not know them yet, look again
             // (a Steam id of 0 would hide a privileged player from the privileged list).
-            if (SteamId == 0) SteamId = MySession.Static.Players.TryGetSteamId(PlayerId);
+            if (SteamId == 0) SteamId = MySession.Static?.Players?.TryGetSteamId(PlayerId) ?? 0;
             if (string.IsNullOrEmpty(PlayerName) || PlayerName == "Unknown")
-                PlayerName = MySession.Static.Players.TryGetIdentity(PlayerId)?.DisplayName ?? "Unknown";
-            
+                PlayerName = MySession.Static?.Players?.TryGetIdentity(PlayerId)?.DisplayName ?? "Unknown";
+
             LastDataUpdateTick = Stopwatch.GetTimestamp();
             if (!PBBlocks.TryGetValue(data.ProgBlock.EntityId, out TrackedPBBlock? trackedPBBlock) || trackedPBBlock == null)
             {
-                trackedPBBlock = new TrackedPBBlock(data.ProgBlock.CubeGrid.DisplayName, data.ProgBlock);
-                PBBlocks.TryAdd(data.ProgBlock.EntityId, trackedPBBlock);
-                return;
+                trackedPBBlock = new TrackedPBBlock(data.ProgBlock.CubeGrid?.DisplayName ?? "Unknown grid", data.ProgBlock);
+                trackedPBBlock = PBBlocks.GetOrAdd(data.ProgBlock.EntityId, trackedPBBlock);
             }
 
-            if (trackedPBBlock.IsUnderGracePeriod(MySession.Static.Players.TryGetSteamId(data.ProgBlock.OwnerId)))
+            // Every run counts as activity, even inside the startup allowance (see TrackedPBBlock.Touch).
+            trackedPBBlock.Touch();
+
+            if (trackedPBBlock.IsUnderGracePeriod(SteamId))
                 return;
-            
+
             trackedPBBlock.AddRuntimeData(data.RunTime, SteamId);
-            PunishmentManager.CheckForPunishment(this, trackedPBBlock.ProgrammableBlock!.EntityId, data.RunTime);
+            PunishmentManager.CheckForPunishment(this, data.ProgBlock.EntityId, data.RunTime, data.GcAffected);
         }
-        
+
         public List<TrackedPBBlock> GetAllPBBlocks
         {
             get
@@ -83,37 +101,74 @@ namespace Advanced_PB_Limiter.Utils
                 return total;
             }
         }
-        
-        public void GetAllPBBlocksLastRunTimeMS(Span<double> runtimeTimeMS)
+
+        /// <summary>Server time all of this player's blocks use, in milliseconds per second.</summary>
+        public double TotalLoadMSPerSecond
         {
-            int index = 0;
-            foreach (KeyValuePair<long, TrackedPBBlock> kvp in PBBlocks)
+            get
             {
-                if (index >= runtimeTimeMS.Length) break; // a block was added after the caller sized the buffer
-                runtimeTimeMS[index++] = kvp.Value.LastRunTimeMS;
+                double total = 0;
+                foreach (TrackedPBBlock block in PBBlocks.Values) total += block.LoadMSPerSecond;
+                return total;
             }
         }
-        
-        public void GetAllPBBlocksMSAvg(Span<double> runtimeTimeMSAvg)
+
+        /// <summary>Sum of the blocks' enforced averages (<see cref="TrackedPBBlock.RunTimeMSAvg"/>).</summary>
+        public double TotalRunTimeMSAvg
         {
-            int index = 0;
-            foreach (KeyValuePair<long, TrackedPBBlock> kvp in PBBlocks)
+            get
             {
-                if (index >= runtimeTimeMSAvg.Length) break;
-                runtimeTimeMSAvg[index++] = kvp.Value.RunTimeMSAvg;
+                double total = 0;
+                foreach (TrackedPBBlock block in PBBlocks.Values) total += block.RunTimeMSAvg;
+                return total;
             }
         }
-        
+
+        // ---- combined offences
+
+        public long LastCombinedOffenceTick => Interlocked.Read(ref _lastCombinedOffenceTick);
+
+        /// <summary>Adds a combined offence and returns how many the player now has.</summary>
+        public int AddCombinedOffence()
+        {
+            long now = Stopwatch.GetTimestamp();
+            Interlocked.Exchange(ref _lastCombinedOffenceTick, now);
+            lock (_combinedOffences)
+            {
+                _combinedOffences.Add(now);
+                return _combinedOffences.Count;
+            }
+        }
+
+        public void PruneCombinedOffences(double maxAgeSeconds)
+        {
+            long oldest = Stopwatch.GetTimestamp() - (long)(maxAgeSeconds * Stopwatch.Frequency);
+            lock (_combinedOffences) _combinedOffences.RemoveAll(tick => tick < oldest);
+        }
+
+        public void ClearCombinedOffences()
+        {
+            lock (_combinedOffences) _combinedOffences.Clear();
+        }
+
+        public int CombinedOffenceCount
+        {
+            get { lock (_combinedOffences) return _combinedOffences.Count; }
+        }
+
         private void CleanUpOldPBBlocks()
         {
             try
             {
+                long now = Stopwatch.GetTimestamp();
+                // Never shorter than 30 s: an Update100 script runs every 1.7 s (every 5 s or so at low sim speed). Dropping it between
+                // runs would re-create it with a fresh startup allowance each time, and it would never be measured.
+                double inactiveSeconds = Math.Max(30, Config.RemoveInactivePBsAfterSeconds);
                 foreach (KeyValuePair<long, TrackedPBBlock> entry in PBBlocks)
                 {
                     TrackedPBBlock pbBlock = entry.Value;
-                    bool gone = pbBlock.ProgrammableBlock is null;
-                    bool inactive = (Stopwatch.GetTimestamp() - pbBlock.LastUpdateTick) / Stopwatch.Frequency > Config.RemoveInactivePBsAfterSeconds;
-                    if (gone || inactive) PBBlocks.TryRemove(entry.Key, out _);
+                    bool inactive = (now - pbBlock.LastUpdateTick) / (double)Stopwatch.Frequency > inactiveSeconds;
+                    if (pbBlock.IsGone || inactive) PBBlocks.TryRemove(entry.Key, out _);
                 }
 
                 // Update cleanup interval if it has changed
@@ -133,24 +188,14 @@ namespace Advanced_PB_Limiter.Utils
             _cleanupTimer.Stop();
             _cleanupTimer.Dispose();
         }
-        
+
         public void ResetPBBlockData(MyProgrammableBlock pbBlock)
         {
-            if (!PBBlocks.TryGetValue(pbBlock.EntityId, out TrackedPBBlock trackedPBBlock))
-            {
-                // Log.Warn("Unable to find PB Block to reset!");
-                // "Check Code" button in the pb interface will cause this to happen, probably compiles it in a fake or temp pb which isnt in the list. 
-                return;
-            }
+            // "Check Code" in the terminal compiles in a temporary block that is not tracked: nothing to reset then.
+            if (!PBBlocks.TryGetValue(pbBlock.EntityId, out TrackedPBBlock trackedPBBlock)) return;
 
-            if (trackedPBBlock.ProgrammableBlock is null)
-            {
-                Log.Warn("PB Block is null to reset!");
-                return;
-            }
-            
-            PBBlocks[trackedPBBlock.ProgrammableBlock.EntityId].ClearRunTimes();
-            PBBlocks[trackedPBBlock.ProgrammableBlock.EntityId].ResetMemoryUsage();
+            trackedPBBlock.ClearRunTimes();
+            trackedPBBlock.ResetMemoryUsage();
         }
     }
 }

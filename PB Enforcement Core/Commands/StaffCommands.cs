@@ -17,10 +17,24 @@ namespace Advanced_PB_Limiter.Commands
     {
         private Advanced_PB_LimiterConfig Config => Advanced_PB_Limiter.Instance!.Config!;
 
+        /// <summary>
+        /// Commands that change something obey the owner's "Deny Staff Commands" switch. The server owner and the Torch console
+        /// are always allowed, so the owner can never lock themselves out. (Before 3.1.2, Enable, Disable, Debug and
+        /// RequestPbShutdown ignored the switch, so a denied admin could still switch enforcement off.)
+        /// </summary>
+        private bool StaffCommandAllowed()
+        {
+            if (Config.AllowStaffCommands) return true;
+            if (Context.Player == null || Context.Player.PromoteLevel >= MyPromoteLevel.Owner) return true;
+            Context.Respond("Staff commands are disabled in the config.  Please enable them to use this command.");
+            return false;
+        }
+
         [Command("requestpbshutdown", "Send the shutdown request to all pb scripts that monitor for it.  add the amount of seconds until restart if desired.  Eg: !PB requestpbshutdown 10")]
         [Permission(MyPromoteLevel.Admin)]
         public void RequestPbShutdown(int seconds = 1)
         {
+            if (!StaffCommandAllowed()) return;
             MySandboxGame.Static.Invoke(() => // Not sure if this actually needs to be forced on the game thread.
             {
                 foreach (TrackedPlayer? tplayer in TrackingManager.PlayersTracked.Values)
@@ -28,7 +42,16 @@ namespace Advanced_PB_Limiter.Commands
                     if (tplayer == null) continue;
                     foreach (TrackedPBBlock? pbBlock in tplayer.GetAllPBBlocks)
                     {
-                        pbBlock?.ProgrammableBlock?.Run($"GracefulShutDown::{seconds}", UpdateType.Script);
+                        // One block failing (or already removed) must not stop the rest, nor throw on the game thread.
+                        try
+                        {
+                            if (pbBlock is null || pbBlock.IsGone) continue;
+                            pbBlock.ProgrammableBlock?.Run($"GracefulShutDown::{seconds}", UpdateType.Script);
+                        }
+                        catch (System.Exception e)
+                        {
+                            NLog.LogManager.GetCurrentClassLogger().Warn(e, "Could not send the shutdown request to a programmable block.");
+                        }
                     }
                 }
             }, "Advanced_PB_Limiter");
@@ -38,6 +61,7 @@ namespace Advanced_PB_Limiter.Commands
         [Permission(MyPromoteLevel.Admin)]
         public void Debug(bool debug)
         {
+            if (!StaffCommandAllowed()) return;
             Config.DebugReporting = debug;
             Context.Respond("Debug mode is now " + (debug ? "enabled." : "disabled."));
         }
@@ -61,11 +85,7 @@ namespace Advanced_PB_Limiter.Commands
         [Permission(MyPromoteLevel.Admin)]
         public void BlacklistScript(long blockEntityId, string name = "")
         {
-            if (!Config.AllowStaffCommands)
-            {
-                Context.Respond("Staff commands are disabled in the config.  Please enable them to use this command.");
-                return;
-            }
+            if (!StaffCommandAllowed()) return;
 
             if (!TryGetProgrammableBlock(blockEntityId, out var pb) || pb == null)
             {
@@ -95,11 +115,7 @@ namespace Advanced_PB_Limiter.Commands
         [Permission(MyPromoteLevel.Admin)]
         public void BlacklistSignature(string signature, string name = "")
         {
-            if (!Config.AllowStaffCommands)
-            {
-                Context.Respond("Staff commands are disabled in the config.  Please enable them to use this command.");
-                return;
-            }
+            if (!StaffCommandAllowed()) return;
 
             BlacklistedScript entry = new()
             {
@@ -116,11 +132,7 @@ namespace Advanced_PB_Limiter.Commands
         [Permission(MyPromoteLevel.Admin)]
         public void UnblacklistScript(string name)
         {
-            if (!Config.AllowStaffCommands)
-            {
-                Context.Respond("Staff commands are disabled in the config.  Please enable them to use this command.");
-                return;
-            }
+            if (!StaffCommandAllowed()) return;
 
             int removed = ScriptBlacklistManager.RemoveByName(name);
             Context.Respond(removed > 0 ? $"Removed {removed} entr{(removed == 1 ? "y" : "ies")} named \"{name}\"." : $"Nothing on the blacklist is named \"{name}\".");
@@ -159,11 +171,7 @@ namespace Advanced_PB_Limiter.Commands
         [Permission(MyPromoteLevel.Admin)]
         public void RestoreBlocks()
         {
-            if (!Config.AllowStaffCommands)
-            {
-                Context.Respond("Staff commands are disabled in the config.  Please enable them to use this command.");
-                return;
-            }
+            if (!StaffCommandAllowed()) return;
 
             CommandContext context = Context;
             BlockActionLog.RestoreAll((restored, skipped) =>
@@ -183,7 +191,7 @@ namespace Advanced_PB_Limiter.Commands
             Context.Respond(ScriptBlacklistManager.Diagnose(pb));
         }
 
-        [Command("TopScripts", "Lists the programmable blocks with the highest average run time, with block id and script fingerprint, so you can blacklist them.  Eg: !PB TopScripts 10")]
+        [Command("TopScripts", "Lists the programmable blocks using the most server time, with block id and script fingerprint, so you can blacklist them.  Eg: !PB TopScripts 10")]
         [Permission(MyPromoteLevel.Admin)]
         public void TopScripts(int count = 10)
         {
@@ -205,14 +213,14 @@ namespace Advanced_PB_Limiter.Commands
             }
 
             System.Text.StringBuilder sb = new();
-            sb.AppendLine($"Top {System.Math.Min(count, rows.Count)} programmable blocks by average run time:");
+            sb.AppendLine($"Top {System.Math.Min(count, rows.Count)} programmable blocks by server time used (load):");
             int rank = 1;
-            foreach (var row in rows.OrderByDescending(r => r.Block.RunTimeMSAvg).Take(count))
+            foreach (var row in rows.OrderByDescending(r => r.Block.LoadMSPerSecond).ThenByDescending(r => r.Block.RunTimeMSAvgSoFar).Take(count))
             {
                 var pb = row.Block.ProgrammableBlock!;
                 string fingerprint = ScriptBlacklistManager.GetFingerprint(pb) ?? "no script";
                 if (fingerprint.Length > 12) fingerprint = fingerprint.Substring(0, 12);
-                sb.AppendLine($"{rank++}. {row.Player} | {row.Block.GridName} >> {pb.CustomName} | id {pb.EntityId} | avg {row.Block.RunTimeMSAvg:0.0000} ms | {fingerprint}");
+                sb.AppendLine($"{rank++}. {row.Player} | {row.Block.GridName} >> {pb.CustomName} | id {pb.EntityId} | load {row.Block.LoadMSPerSecond:0.000} ms/s | avg {row.Block.RunTimeMSAvgSoFar:0.0000} ms | {fingerprint}");
             }
             sb.AppendLine("Use !PB BlacklistScript <id> to block one of these scripts.");
             Context.Respond(sb.ToString());
@@ -236,11 +244,7 @@ namespace Advanced_PB_Limiter.Commands
         [Permission(MyPromoteLevel.Admin)]
         public void SendOffenceReport()
         {
-            if (!Config.AllowStaffCommands)
-            {
-                Context.Respond("Staff commands are disabled in the config.  Please enable them to use this command.");
-                return;
-            }
+            if (!StaffCommandAllowed()) return;
 
             Context.Respond("Sending the offence report to Discord...");
             CommandContext context = Context;
@@ -267,6 +271,7 @@ namespace Advanced_PB_Limiter.Commands
         [Permission(MyPromoteLevel.Admin)]
         public void Disable()
         {
+            if (!StaffCommandAllowed()) return;
             Config.Enabled = false;
             Context.Respond("PB Enforcement Core is now disabled.");
         }
@@ -275,6 +280,7 @@ namespace Advanced_PB_Limiter.Commands
         [Permission(MyPromoteLevel.Admin)]
         public void Enable()
         {
+            if (!StaffCommandAllowed()) return;
             Config.Enabled = true;
             Context.Respond("PB Enforcement Core is now enabled.");
         }
@@ -301,11 +307,7 @@ namespace Advanced_PB_Limiter.Commands
         [Permission(MyPromoteLevel.Admin)]
         public void CreatePrivilegedUser(ulong steamId, double maxRunTimeMS, double maxRunTimeMSAvg, bool combinedLimits, double maxAllBlocksCombinedRunTimeMS, double maxAllBlocksCombinedRunTimeMSAvg, int offencesBeforePunishment, Enums.Punishment punishment, int gracefulShutDownRequestDelay)
         {
-            if (!Config.AllowStaffCommands)
-            {
-                Context.Respond("Staff commands are disabled in the config.  Please enable them to use this command.");
-                return;
-            }
+            if (!StaffCommandAllowed()) return;
             
             if (Config.PrivilegedPlayers.ContainsKey(steamId))
             {
@@ -331,7 +333,9 @@ namespace Advanced_PB_Limiter.Commands
                     CombinedRuntimeAverageAllowance = maxAllBlocksCombinedRunTimeMSAvg,
                     OffencesBeforePunishment = offencesBeforePunishment,
                     Punishment = punishment,
-                    GracefulShutDownRequestDelay = gracefulShutDownRequestDelay
+                    GracefulShutDownRequestDelay = gracefulShutDownRequestDelay,
+                    StartupAllowance = Config.StartupAllowance, // was left at 0: no startup allowance at all for privileged players
+                    DamageAmount = Config.PunishDamageAmount
                 });
                 Context.Respond("Privileged user created.");
             }

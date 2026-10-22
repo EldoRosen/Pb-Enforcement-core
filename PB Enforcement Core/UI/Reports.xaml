@@ -181,7 +181,7 @@
                     <Button Name="SaveCurrentReport" Content="Save Current Report To File" ToolTip="Saves current report to file" Margin="3" Click="SaveCurrentReport_OnClick"/>
                     <Rectangle Height="20" Width="3" Fill="{StaticResource EdgeBrush}" Margin="3"/>
                     <TextBlock Text="Refresh Rate: " Margin="3" ToolTip="In seconds, how often the live reporting updates (0.25 to 60)." VerticalAlignment="Center"/>
-                    <TextBox Name="RefreshRateTextBox" Text="0.5" Width="36" Margin="3" ToolTip="In seconds, how often the live reporting updates (0.25 to 60).  You will need to stop and restart live reporting for changes to take effect." VerticalAlignment="Center" TextAlignment="Center"/>
+                    <TextBox Name="RefreshRateTextBox" Text="0.5" Width="36" Margin="3" ToolTip="In seconds, how often the live reporting updates (0.25 to 60). Press Enter or click elsewhere to apply." VerticalAlignment="Center" TextAlignment="Center" KeyDown="RefreshRateTextBox_OnKeyDown" LostFocus="RefreshRateTextBox_OnLostFocus"/>
                 </WrapPanel>
                 <TextBlock Name="LiveStatusText" Margin="3,2,3,2" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}"
                            Text="The live view is off. Press Enable Live View, or Manually Update for a single refresh."/>
@@ -203,16 +203,19 @@
                     <DataGridTextColumn Header="Player Name" Binding="{Binding PlayerName}"/>
                     <DataGridTextColumn Header="Grid Name" Binding="{Binding GridName}"/>
                     <DataGridTextColumn Header="Block Name" Binding="{Binding BlockName}"/>
+                    <DataGridTextColumn Header="State" Binding="{Binding StateText}"/>
                     <DataGridTextColumn Header="Last MS" Binding="{Binding LastRunTimeMS, StringFormat={}{0:0.######}}"/>
-                    <DataGridTextColumn Header="Avg MS" Binding="{Binding AvgMS, StringFormat={}{0:0.######}}"/>
-                    <DataGridTextColumn Header="Peek MS" Binding="{Binding PeekRunTimeMS, StringFormat={}{0:0.######}}"/>
+                    <DataGridTextColumn Header="Avg so far MS" Binding="{Binding AvgMS, StringFormat={}{0:0.######}}"/>
+                    <DataGridTextColumn Header="Avg (enforced) MS" Binding="{Binding AvgEnforcedMS, StringFormat={}{0:0.######}}"/>
+                    <DataGridTextColumn Header="Load ms/s" Binding="{Binding LoadMSPerSecond, StringFormat={}{0:0.####}}"/>
+                    <DataGridTextColumn Header="Peak MS (since compile)" Binding="{Binding PeekRunTimeMS, StringFormat={}{0:0.######}}"/>
                     <DataGridTextColumn Header="Offenses" Binding="{Binding Offences}"/>
                     <DataGridTextColumn Header="Recompiles" Binding="{Binding Recompiles}"/>
                     <DataGridTextColumn Header="Memory" Binding="{Binding MemoryUsed}"/>
                     <DataGridTemplateColumn>
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Button Content="Turn Off" Tag="{Binding pbBlock}" PreviewMouseUp="TurnOff_PB"/>
+                                <Button Content="Turn Off" Tag="{Binding}" IsEnabled="{Binding IsOn}" Click="TurnOff_PB"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -233,8 +236,9 @@
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Player SteamID" Binding="{Binding SteamId}"/>
                     <DataGridTextColumn Header="Player Name" Binding="{Binding PlayerName}"/>
-                    <DataGridTextColumn Header="Combined MS" Binding="{Binding CombinedLastRunTimeMS, StringFormat={}{0:0.####}}"/>
-                    <DataGridTextColumn Header="Combined Avg MS" Binding="{Binding CombinedAvgMS, StringFormat={}{0:0.####}}"/>
+                    <DataGridTextColumn Header="Sum of last runs MS" Binding="{Binding CombinedLastRunTimeMS, StringFormat={}{0:0.####}}"/>
+                    <DataGridTextColumn Header="Combined Avg (enforced) MS" Binding="{Binding CombinedAvgMS, StringFormat={}{0:0.####}}"/>
+                    <DataGridTextColumn Header="Load ms/s" Binding="{Binding LoadMSPerSecond, StringFormat={}{0:0.####}}"/>
                     <DataGridTextColumn Header="Offenses" Binding="{Binding Offences}"/>
                     <DataGridTextColumn Header="PB's Tracked" Binding="{Binding PbCount}"/>
                     <DataGridTextColumn Header="Recompiles" Binding="{Binding Recompiles}"/>
@@ -242,7 +246,7 @@
                     <DataGridTemplateColumn>
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Button Content="Turn All Off" Tag="{Binding PlayerTracked}" PreviewMouseUp="TurnOff_AllPB"/>
+                                <Button Content="Turn All Off" Tag="{Binding}" Click="TurnOff_AllPB"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>

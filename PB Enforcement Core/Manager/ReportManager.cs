@@ -170,7 +170,7 @@ namespace Advanced_PB_Limiter.Manager
                         tracked.ProgrammableBlock.CubeGrid?.DisplayName ?? tracked.GridName,
                         tracked.ProgrammableBlock.CustomName.ToString(),
                         tracked.LastRunTimeMS,
-                        tracked.RunTimeMSAvg,
+                        tracked.RunTimeMSAvgSoFar, // the enforced average stays 0 until MaxRunsToTrack runs, which made reports read 0 for most blocks
                         tracked.Offences.Count,
                         tracked.Recompiles);
 

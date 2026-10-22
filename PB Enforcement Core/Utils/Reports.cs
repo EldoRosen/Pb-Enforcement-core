@@ -53,6 +53,22 @@ namespace Advanced_PB_Limiter.Utils.Reports
             if (MemoryUsed != memory) { MemoryUsed = memory; Raise(nameof(MemoryUsed)); }
             if (!ReferenceEquals(pbBlock, progBlock)) { pbBlock = progBlock; Raise(nameof(pbBlock)); }
         }
+
+        /// <summary>The average limits are checked against (0 until enough runs are collected).</summary>
+        public double AvgEnforcedMS { get; private set; }
+        /// <summary>Server time the block uses, in milliseconds per second.</summary>
+        public double LoadMSPerSecond { get; private set; }
+        public bool IsOn { get; private set; } = true;
+        public string StateText => IsOn ? "On" : "Off";
+
+        public void UpdateLive(double avgEnforcedMs, double loadMsPerSecond, bool isOn)
+        {
+            double avg = Math.Round(avgEnforcedMs, 6);
+            if (AvgEnforcedMS != avg) { AvgEnforcedMS = avg; Raise(nameof(AvgEnforcedMS)); }
+            double load = Math.Round(loadMsPerSecond, 4);
+            if (LoadMSPerSecond != load) { LoadMSPerSecond = load; Raise(nameof(LoadMSPerSecond)); }
+            if (IsOn != isOn) { IsOn = isOn; Raise(nameof(IsOn)); Raise(nameof(StateText)); }
+        }
     }
 
     /// <summary>One row of the live view's "Per Player" table. Updated in place, like <see cref="CustomBlockReport"/>.</summary>
@@ -92,6 +108,15 @@ namespace Advanced_PB_Limiter.Utils.Reports
             string memory = HelperUtils.FormatBytesToKB(memoryUsed);
             if (MemoryUsed != memory) { MemoryUsed = memory; Raise(nameof(MemoryUsed)); }
             if (!ReferenceEquals(PlayerTracked, playerTracked)) { PlayerTracked = playerTracked; Raise(nameof(PlayerTracked)); }
+        }
+
+        /// <summary>Server time all the player's blocks use, in milliseconds per second.</summary>
+        public double LoadMSPerSecond { get; private set; }
+
+        public void UpdateLive(double loadMsPerSecond)
+        {
+            double load = Math.Round(loadMsPerSecond, 4);
+            if (LoadMSPerSecond != load) { LoadMSPerSecond = load; Raise(nameof(LoadMSPerSecond)); }
         }
     }
     

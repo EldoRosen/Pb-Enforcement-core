@@ -38,7 +38,8 @@ namespace Advanced_PB_Limiter
         public UserControl GetControl() => _control ?? (_control = new Advanced_PB_LimiterControl());
         private Persistent<Advanced_PB_LimiterConfig>? _config;
         public Advanced_PB_LimiterConfig? Config => _config?.Data;
-        public static Dispatcher UI_Dispatcher { get; set; } = Dispatcher.CurrentDispatcher;
+        /// <summary>The settings window's thread, once the window exists. Null before that, so list changes apply at once instead of waiting 2 s for a thread that never runs a window.</summary>
+        public static Dispatcher? UI_Dispatcher { get; set; }
         private static Thread? UpdateThread { get; set; }
         private static Thread? MainThread { get; set; }
         private static Thread? DrawThread { get; set; }
@@ -90,8 +91,19 @@ namespace Advanced_PB_Limiter
 
         private void SessionChanged(ITorchSession session, TorchSessionState state)
         {
+            try { SessionChangedCore(state); }
+            catch (Exception e) { Log.Error(e, $"PB Enforcement Core could not handle the session change to {state}."); }
+        }
+
+        private void SessionChangedCore(TorchSessionState state)
+        {
             switch (state)
             {
+                case TorchSessionState.Loading:
+                    // Scripts are constructed while the world loads: start noting blocks that are off before that happens.
+                    ProfilerPatch_Torch.BeginLoading();
+                    break;
+
                 case TorchSessionState.Loaded:
                     Log.Info("Session Loaded!");
                     UpdateThread = MySandboxGame.Static.UpdateThread;

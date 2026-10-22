@@ -178,7 +178,11 @@ namespace Advanced_PB_Limiter.Manager
             if (pb.Enabled)
             {
                 BlockActionLog.Record(pb, "Switched off", $"it runs the blacklisted script \"{result.EntryName}\"");
-                MySandboxGame.Static.Invoke(() => { pb.Enabled = false; }, "PB Enforcement Core");
+                MySandboxGame.Static.Invoke(() =>
+                {
+                    try { if (!pb.Closed) pb.Enabled = false; }
+                    catch (Exception e) { Log.Warn(e, "Could not switch off a blacklisted programmable block."); }
+                }, "PB Enforcement Core");
             }
 
             Notify(pb, result);

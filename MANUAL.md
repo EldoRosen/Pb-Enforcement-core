@@ -1,6 +1,6 @@
 ﻿# PB Enforcement Core: Manual
 
-**Version 3.0.4.** Plugin file name: `PB Enforcement Core.zip`. Plugin revamped by Eldo Rosen, The Destiny Universe, based on the original code by SentorX.
+**Version 3.1.3.** Plugin file name: `PB Enforcement Core.zip`. Plugin revamped by Eldo Rosen, The Destiny Universe, based on the original code by SentorX.
 
 A Torch plugin for Space Engineers dedicated servers. It watches how much server time every programmable block (PB) uses and steps in only when a script hurts the server.
 
@@ -136,11 +136,11 @@ If a Space Engineers or Torch update breaks the plugin, rebuild it against the n
 
 ## 3. How it works
 
-1. **Measuring.** Every time a PB runs, the plugin records how long it took (in milliseconds). It ignores runs during a world save, runs hit by a garbage collection, and the first 60 seconds after a block starts (the startup allowance).
-2. **Offences.** A block gets an **offence** when one run is slower than **Max runtime** (default 0.8 ms) or its average over the last 50 runs is above **Max runtime average** (default 0.4 ms). A block can get at most one offence every 15 seconds, and each offence is forgotten after 1 minute.
-3. **Warnings and punishment.** The owner is warned about each offence. After 3 offences, the next one triggers the punishment. First the script is asked to shut down gracefully, and after the delay (default 10 seconds) the punishment is applied: **Turn off**, **Damage**, or **Destroy** (damage the block to below functional level).
-4. **Instant kill.** One run longer than **InstaKill Limit** (default 10 ms), or a script using more memory than the limit (default about 10 MB), is punished immediately with no warnings. Set a limit to 0 to switch it off.
-5. **Combined limits.** Every 10 seconds the plugin adds up all of a player's blocks. If the total is over the combined limits (defaults 3.0 ms and 2.0 ms average) the player collects combined offences. After 3 of them, the **heaviest** block is punished (or all of the player's blocks, if you tick that box).
+1. **Measuring.** Every time a PB runs, the plugin records how long it took (in milliseconds). Time spent in another PB that this one runs (TryRun) is charged to that PB, not this one. It ignores runs during a world save and the first 60 seconds after a block starts (the startup allowance). A run hit by a garbage collection still counts towards the average and load, but never on its own for a single-run offence or the instant kill.
+2. **Offences.** A block gets an **offence** when one run is slower than **Max runtime** (default 0.8 ms) or its average over the last 50 runs is above **Max runtime average** (default 0.4 ms). A block can get at most one offence every 15 seconds. Each offence is forgotten after 1 minute, or after long enough for the allowed offences plus one to happen 15 seconds apart, whichever is longer.
+3. **Warnings and punishment.** The owner is warned about each offence. After 3 offences, the next one triggers the punishment. The punishment is applied straight away: **Turn off**, **Damage**, or **Destroy** (damage the block to just below working integrity). With **Send shutdown request** ticked, the script is first run with `GracefulShutDown::<seconds>` and punished after the delay (default 10 seconds). A punished block starts with a clean record if it is switched back on.
+4. **Instant kill.** Runs longer than **InstaKill Limit** (default 10 ms) **3 times within 10 seconds**, or a script over the memory limit (default about 10 MB) in two memory scans in a row, get the punishment type straight away with no warnings. Set a limit to 0 to switch it off.
+5. **Combined limits.** Every 10 seconds the plugin checks each player's blocks together: their total server time **per tick** against **Max combined runtime** (default 3.0 ms), and the sum of their averages against **Max combined runtime average** (default 2.0 ms). Players under the 5 ms-per-second filter below are skipped. Each breach is one combined offence (at most one per check, 15 seconds apart) with a chat warning. After 3, the **heaviest** block is punished (or all of the player's blocks, if you tick that box); the player's combined offences are then cleared and they are left alone for 25 seconds.
 
 ### Smart enforcement (so players' scripts keep running)
 
@@ -176,27 +176,28 @@ Every change is saved automatically a moment after you make it (the Save buttons
 | Ignore NPC blocks | on | NPC-owned blocks are not tracked or limited |
 | Auto Enable | off | Lets players' `Save()` turn their block on by itself |
 | Auto Enable NPC | on | Same, for NPC-owned blocks |
-| InstaKill Limit | 10 ms | A single run above this is punished at once (0 = off) |
-| Use SimTime | on | Adjusts run time for sim speed, so lag is not blamed on players |
-| Use Game Time | on | Uses the game's own run-time measurement |
+| InstaKill Limit | 10 ms | Runs above this are punished at once (0 = off) |
+| Instant kill runs | 3 within 10 s | How many runs over the InstaKill Limit, within how many seconds |
+| Turn off on script error | off | Switch a block off when its script crashes (the game already stops the script) |
 | No Recompile On Restart | off | Blocks that were off at restart need a Recompile, not Run, to start |
-| Monitor Memory Usage | on | Limits script memory |
+| Monitor Memory Usage | on | Estimates script memory every 5 s, without pausing scripts |
 | Max Memory per PB | 10,240,000 bytes | Memory limit (0 = off) |
 | Startup Allowance | 60 s | Run time is ignored for this long after a block starts |
-| Defer Run options | off | Make blocks run less often when asked (always, or below a sim speed) |
+| Defer Run options | off | Make blocks run less often (always, or below a sim speed). Only periodic runs; buttons, timers, other scripts and IGC always run. Needs a defer count of 2 or more |
 | Disable Update1 | off | Runs Update1 scripts at Update10 speed |
-| Destroy Protected PB | off | Blocks in safe zones are dismounted instead of damaged |
+| Destroy Protected PB | off | Blocks in a protected area (damage off) are stripped to unwelded instead of only switched off |
 
 ### Main Settings tab > "Player Settings"
 
 | Setting | Default | What it does |
 |---|---|---|
-| Graceful shutdown delay | 10 s | Wait before a punishment (0 = none) |
+| Send shutdown request | off | Run the script with `GracefulShutDown::<seconds>` before punishing it |
+| Graceful shutdown delay | 10 s | Wait before a punishment, only with Send shutdown request (0 = none) |
 | Max runtime | 0.8 ms | Single run limit (0 = none) |
 | Max runtime average | 0.4 ms | Average limit (0 = none) |
 | Runs to track for averaging | 50 | How many runs make the average |
 | Limit combined PBs | on | Adds up a player's blocks |
-| Max combined runtime / average | 3.0 / 2.0 ms | Combined limits (0 = none) |
+| Max combined runtime / average | 3.0 / 2.0 ms | Combined limits: ms per tick of total load / sum of averages (0 = none) |
 | Punish all combined PBs | off | Off: only the heaviest block. On: all of the player's blocks |
 | Allowed single block offences | 3 | Offences before punishment |
 | Allowed combined block offences | 3 | Combined offences before punishment |

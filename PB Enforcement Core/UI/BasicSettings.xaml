@@ -222,15 +222,18 @@
                 
                 <TextBlock Grid.Row="5" Grid.Column="0" Text="InstaKill Limit" Margin="3" VerticalAlignment="Center" Foreground="Red"/>
                 <TextBox Grid.Row="5" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding InstantKillThreshold}" TextAlignment="Center"/>
-                <TextBlock Grid.Row="5" Grid.Column="2" Text="Any pb that reaches this limit will be damaged beyond function immediately, regardless if no offences have previously occured.  No Graceful shutdown request will be sent.  Set to 0 to disable." Margin="3" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="5" Grid.Column="2" Text="Milliseconds. A pb that goes over this several times within a few seconds (see Instant kill runs below) gets the punishment type from Player Settings straight away, with no warnings. Single slow runs are ignored. Set to 0 to disable." Margin="3" TextWrapping="Wrap"/>
 
-                <TextBlock Grid.Row="6" Grid.Column="0" Text="Use SimTime" Margin="3" VerticalAlignment="Center"  />
-                <CheckBox Grid.Row="6" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding UseSimTime}" />
-                <TextBlock Grid.Row="6" Grid.Column="2" Text="Use SimTime will adjust the runtime for Sim Speed.  When sim speed tanks then the script running can also take longer to run at no fault of the player." Margin="3" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Turn off on script error" Margin="3" VerticalAlignment="Center"  />
+                <CheckBox Grid.Row="6" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding TurnOffOnScriptError}" />
+                <TextBlock Grid.Row="6" Grid.Column="2" Text="Switch a pb off when its script crashes or hits the instruction limit. The game already stops such a script and shows the error in the terminal, so this is off by default. (Replaces Use SimTime, which made run times look longer whenever the server lagged.)" Margin="3" TextWrapping="Wrap" />
                 
-                <TextBlock Grid.Row="7" Grid.Column="0" Text="Use Game Time" Margin="3" VerticalAlignment="Center"  />
-                <CheckBox Grid.Row="7" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding UseGameReportedRuntime}" />
-                <TextBlock Grid.Row="7" Grid.Column="2" Text="Uses the reported runtime from the games internal runtime tracker itself, which is where pb scripts get their LastRuntimeMs reports from.  No further calculations are performed unless you enable Use SimTime." Margin="3" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="Instant kill runs" Margin="3" VerticalAlignment="Center"  />
+                <StackPanel Grid.Row="7" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBox Margin="3" Width="30" Text="{Binding InstantKillSamples}" TextAlignment="Center" ToolTip="Runs over the InstaKill Limit"/>
+                    <TextBox Margin="3" Width="30" Text="{Binding InstantKillWindowSeconds}" TextAlignment="Center" ToolTip="Within this many seconds"/>
+                </StackPanel>
+                <TextBlock Grid.Row="7" Grid.Column="2" Text="How many runs over the InstaKill Limit (first box), within how many seconds (second box), before the instant punishment. Default 3 within 10. (Replaces Use Game Time: run times are always measured by the plugin itself.)" Margin="3" TextWrapping="Wrap" />
                 
                 <TextBlock Grid.Row="8" Grid.Column="0" Text="No Recompile On Restart" Margin="3" VerticalAlignment="Center" Foreground="Red"/>
                 <CheckBox Grid.Row="8" Grid.Column="1" VerticalAlignment="Center" Margin="3" IsChecked="{Binding RequireRecompileOnRestart}" HorizontalAlignment="Center"/>
@@ -238,7 +241,7 @@
                 
                 <TextBlock Grid.Row="9" Grid.Column="0" Text="Monitor Memory Usage" Margin="3" VerticalAlignment="Center" />
                 <CheckBox Grid.Row="9" Grid.Column="1" VerticalAlignment="Center" Margin="3" IsChecked="{Binding EnableMemoryMonitoring}" HorizontalAlignment="Center"/>
-                <TextBlock Grid.Row="9" Grid.Column="2" Text="Enable/Disable the limiting and monitoring of memory usage." Margin="3" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="9" Grid.Column="2" Text="Estimates each script's memory every 5 seconds without pausing it. A script over the limit below in two scans in a row gets the instant punishment." Margin="3" TextWrapping="Wrap" />
                 
                 <TextBlock Grid.Row="10" Grid.Column="0" Text="Defer Run Always" Margin="3" VerticalAlignment="Center" />
                 <CheckBox Grid.Row="10" Grid.Column="1" VerticalAlignment="Center" Margin="3" IsChecked="{Binding DeferRunAlways}" HorizontalAlignment="Center"/>
@@ -254,7 +257,7 @@
                 
                 <TextBlock Grid.Row="13" Grid.Column="0" Text="How Many Runs To Defer on" Margin="3" VerticalAlignment="Center"/>
                 <TextBox Grid.Row="13" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding DeferRunCount}" TextAlignment="Center"/>
-                <TextBlock Grid.Row="13" Grid.Column="2" Text="How many times should the PB request to run before allowing it." Margin="3" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="13" Grid.Column="2" Text="How many times should the PB request to run before allowing it. 0 or 1 means no deferring. Only periodic runs are deferred; buttons, timers, other scripts and IGC always run." Margin="3" TextWrapping="Wrap"/>
                 
                 <TextBlock Grid.Row="14" Grid.Column="0" Text="Disable Update1" Margin="3" VerticalAlignment="Center" />
                 <CheckBox Grid.Row="14" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding DisableUpdate1}"/>
@@ -266,7 +269,7 @@
                 
                 <TextBlock Grid.Row="16" Grid.Column="0" Text="Destroy Protected PB" Margin="3" VerticalAlignment="Center" />
                 <CheckBox Grid.Row="16" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding KillProtectedBlock}"/>
-                <TextBlock Grid.Row="16" Grid.Column="2" Text="Programmable Blocks in a SafeZone or other modded protected area with damage disabled wont receive any damage.  Enable this will cause the block to be have all its building materials removed and reset to an unwelded block." Margin="3" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="16" Grid.Column="2" Text="Programmable Blocks in a SafeZone or other protected area with damage disabled cannot be damaged, so the Damage and Destroy punishments switch them off instead. Tick this to strip such a block back to an unwelded block instead (only blocks in a protected area)." Margin="3" TextWrapping="Wrap"/>
 
                 <TextBlock Grid.Row="17" Grid.Column="0" Text="Ignore NPC blocks" Margin="3" VerticalAlignment="Center"/>
                 <CheckBox Grid.Row="17" Grid.Column="1" VerticalAlignment="Center" Margin="3" IsChecked="{Binding IgnoreNPCs}"/>
@@ -322,7 +325,11 @@
                 
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Graceful shutdown delay" Margin="3" VerticalAlignment="Center"/>
                 <TextBox Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding GracefulShutDownRequestDelay}"/>
-                <TextBlock Grid.Row="2" Grid.Column="2" Text="How long to wait (in seconds) for the script to shutdown before the punishment is applied.  Use 0 for no delay.  Punishments are always applied after the delay." Margin="3" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="How long to wait (in seconds) for the script to shut down before the punishment is applied. Only used when Send shutdown request is ticked; otherwise punishments happen straight away." Margin="3" TextWrapping="Wrap"/>
+                
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Send shutdown request" Margin="3" VerticalAlignment="Center"/>
+                <CheckBox Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="3" IsChecked="{Binding SendGracefulShutdownRequest}"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Before a punishment, run the script with the argument GracefulShutDown::seconds. Only for scripts written to listen for it; other scripts receive it as an ordinary argument, so this is off by default." Margin="3" TextWrapping="Wrap"/>
                 
                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Max runtime" Margin="3" VerticalAlignment="Center"/>
                 <TextBox Grid.Row="3" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding MaxRunTimeMS}"/>
@@ -342,11 +349,11 @@
                 
                 <TextBlock Grid.Row="7" Grid.Column="0" Text="Max combined runtime limit" Margin="3" VerticalAlignment="Center"/>
                 <TextBox Grid.Row="7" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding MaxAllBlocksCombinedRunTimeMS}"/>
-                <TextBlock Grid.Row="7" Grid.Column="2" Text="Max amount of time (in milliseconds) of all the players pb's before punishing." Margin="3" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="7" Grid.Column="2" Text="Milliseconds per tick: the average server time all of a player's pb's use each tick (their total load). Checked every 10 seconds. Set to 0 for no limit." Margin="3" TextWrapping="Wrap"/>
                 
                 <TextBlock Grid.Row="8" Grid.Column="0" Text="Max combined runtime average" Margin="3" VerticalAlignment="Center"/>
                 <TextBox Grid.Row="8" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding MaxAllBlocksCombinedRunTimeMSAvg}"/>
-                <TextBlock Grid.Row="8" Grid.Column="2" Text="Max amount of time (in milliseconds) all pb's owned by a user is allowed to average before being issued any punishment." Margin="3" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="8" Grid.Column="2" Text="Milliseconds: the sum of the run-time averages of all of a player's pb's. Set to 0 for no limit. Players whose total load is under the Smart Enforcement &quot;Ignore scripts that use less than&quot; value are not checked." Margin="3" TextWrapping="Wrap"/>
                 
                 <TextBlock Grid.Row="9" Grid.Column="0" Text="Punish all combined pb's" Margin="3" VerticalAlignment="Center"/>
                 <CheckBox Grid.Row="9" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" IsChecked="{Binding PunishAllUserBlocksCombinedOnExcessLimits}"/>
@@ -367,7 +374,7 @@
                 
                 <TextBlock Grid.Row="14" Grid.Column="0" Text="Remove offense after time" Margin="3" VerticalAlignment="Center"/>
                 <TextBox Grid.Row="14" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding OffenseDurationBeforeDeletion}"/>
-                <TextBlock Grid.Row="14" Grid.Column="2" Text="How many minutes before an offense is removed.  Each offense is tracked, so only after an offense is at least this old will it be removed." Margin="3" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="14" Grid.Column="2" Text="How many minutes before an offense is removed. Offences are always kept long enough for the allowed offences plus one to happen with the grace time between them." Margin="3" TextWrapping="Wrap"/>
                 
                 <TextBlock Grid.Row="15" Grid.Column="0" Text="Clear data on pb recompile" Margin="3" VerticalAlignment="Center"/>
                 <CheckBox Grid.Row="15" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" IsChecked="{Binding ClearHistoryOnRecompile}"/>
@@ -383,7 +390,7 @@
                 
                 <TextBlock Grid.Row="18" Grid.Column="0" Text="Punishment type" Margin="3" VerticalAlignment="Center"/>
                 <ComboBox Grid.Row="18" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="110" HorizontalAlignment="Left" ItemsSource="{Binding Source={StaticResource EnumDataProvider}}" SelectedItem="{Binding Punishment}"/>
-                <TextBlock Grid.Row="18" Grid.Column="2" Text="Turn off will disable the block.  Damage will applied the set amount of damage points to the block (may not occur in SafeZones.  Destroy will damage the pb to below functional level." Margin="3" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="18" Grid.Column="2" Text="Turn off disables the block. Damage applies the damage points below. Destroy damages the pb to just below working integrity. In a protected area Damage and Destroy switch the block off (see Destroy Protected PB). Also used by the instant kill." Margin="3" TextWrapping="Wrap"/>
                 
                 <TextBlock Grid.Row="19" Grid.Column="0" Text="Damage points" Margin="3"/>
                 <TextBox Grid.Row="19" Grid.Column="1" VerticalAlignment="Center" Margin="3" Width="40" Text="{Binding PunishDamageAmount}" />

@@ -49,11 +49,11 @@ namespace Advanced_PB_Limiter.Commands
                 sb.AppendLine("--------------");
                 sb.AppendLine("Max PB Runtime: " + Config.MaxRunTimeMS + "ms");
                 sb.AppendLine("Max PB Runtime Average: " + Config.MaxRunTimeMSAvg + "ms");
-                sb.AppendLine("Max PB Runtime (All Pb's Combined): " + Config.MaxAllBlocksCombinedRunTimeMS + "ms");
+                sb.AppendLine("Max Runtime Per Tick (All PB's Combined): " + Config.MaxAllBlocksCombinedRunTimeMS + "ms");
                 sb.AppendLine("Max PB Runtime Average (All Pb's Combined): " + Config.MaxAllBlocksCombinedRunTimeMSAvg + "ms");
                 sb.AppendLine("Max Offences Before Punishment: " + Config.MaxOffencesBeforePunishment);
                 sb.AppendLine("Punishment Type: " + Config.Punishment);
-                sb.AppendLine("Graceful Shutdown Period: " + Config.GracefulShutDownRequestDelay + " seconds.");
+                sb.AppendLine("Graceful Shutdown Period: " + (Config.SendGracefulShutdownRequest ? Config.GracefulShutDownRequestDelay + " seconds." : "none (punishments are immediate)"));
                 Context.Respond(sb.ToString());
                 return;
             }
@@ -64,11 +64,11 @@ namespace Advanced_PB_Limiter.Commands
             sb.AppendLine("Max PB Runtime: " + Config.PrivilegedPlayers[Context.Player.SteamUserId].RuntimeAllowance + "ms");
             sb.AppendLine("Max PB Runtime Average: " + Config.PrivilegedPlayers[Context.Player.SteamUserId].RuntimeAverageAllowance + "ms");
             sb.AppendLine("Combined Limits Active: " + !Config.PrivilegedPlayers[Context.Player.SteamUserId].NoCombinedLimits);
-            sb.AppendLine("Max PB Runtime (All Pb's Combined): " + Config.PrivilegedPlayers[Context.Player.SteamUserId].CombinedRuntimeAllowance + "ms");
+            sb.AppendLine("Max Runtime Per Tick (All PB's Combined): " + Config.PrivilegedPlayers[Context.Player.SteamUserId].CombinedRuntimeAllowance + "ms");
             sb.AppendLine("Max PB Runtime Average (All Pb's Combined): " + Config.PrivilegedPlayers[Context.Player.SteamUserId].CombinedRuntimeAverageAllowance + "ms");
             sb.AppendLine("Max Offences Before Punishment: " + Config.PrivilegedPlayers[Context.Player.SteamUserId].OffencesBeforePunishment);
             sb.AppendLine("Punishment Type: " + Config.PrivilegedPlayers[Context.Player.SteamUserId].Punishment);
-            sb.AppendLine("Graceful Shutdown Period: " + Config.PrivilegedPlayers[Context.Player.SteamUserId].GracefulShutDownRequestDelay + " seconds.");
+            sb.AppendLine("Graceful Shutdown Period: " + (Config.SendGracefulShutdownRequest ? Config.PrivilegedPlayers[Context.Player.SteamUserId].GracefulShutDownRequestDelay + " seconds." : "none (punishments are immediate)"));
             Context.Respond(sb.ToString());
         }
 

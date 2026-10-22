@@ -55,6 +55,11 @@ namespace Advanced_PB_Limiter.Manager
                     // Remembered even when the entry below is a repeat, or RestoreBlocks would miss a block punished again within a minute.
                     if (restorable) Restorable[pb.EntityId] = pb;
 
+                    // Deleted blocks must not be kept in memory (with their whole grid) until the session ends.
+                    if (Restorable.Count > 200)
+                        foreach (long gone in Restorable.Where(entry => entry.Value.Closed || entry.Value.MarkedForClose).Select(entry => entry.Key).ToList())
+                            Restorable.Remove(gone);
+
                     // The same thing happening to the same block again within a minute is one event.
                     for (int i = Entries.Count - 1; i >= 0 && i >= Entries.Count - 25; i--)
                     {
@@ -109,7 +114,7 @@ namespace Advanced_PB_Limiter.Manager
                 {
                     try
                     {
-                        if (pb.Closed || pb.Enabled) { skipped++; continue; }
+                        if (pb.Closed || pb.MarkedForClose || pb.Enabled) { skipped++; continue; }
 
                         // Start from a clean slate, or the same offences would switch it straight off again.
                         TrackingManager.GetTrackedPlayerDataById(pb.OwnerId)?.ResetPBBlockData(pb);
@@ -123,7 +128,8 @@ namespace Advanced_PB_Limiter.Manager
                     }
                 }
 
-                done(restored, skipped);
+                try { done(restored, skipped); }
+                catch (Exception e) { Log.Warn(e, "Could not report the restored blocks."); }
             }, "PB Enforcement Core");
         }
 

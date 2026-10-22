@@ -1,6 +1,9 @@
-﻿# PB Enforcement Core (v3.0.4)  
+﻿# PB Enforcement Core (v3.1.3)  
 
 ## Programmable block runtime and memory limiter for Torch (originally Advanced PB Limiter, a full replacement for the PB Limiter by HaE).  
+
+### What changed in 3.1.x
+A large bug-fix release: blocks are now actually measured (they were stuck in their startup allowance), lag no longer inflates run times, the instant kill needs repeated slow runs, the combined check no longer cascades, the memory check no longer runs script code, and every live view button works. See [CHANGES-3.1.0.md](CHANGES-3.1.0.md), [CHANGES-3.1.1.md](CHANGES-3.1.1.md) and [CHANGES-3.1.2.md](CHANGES-3.1.2.md).
 
 ### Custom chat messages
 The warning, punishment and "slowed down" messages players receive, and the chat sender name, can be written by you in the **Chat Responses** tab, with automatic words such as `{grid}` and `{limit}` and an example preview.
