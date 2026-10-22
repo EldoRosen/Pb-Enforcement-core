@@ -55,14 +55,14 @@ namespace Advanced_PB_Limiter
             SetupConfig();
             if (Config != null) PluginLogging.Start(Config);
 
-            // Shared settings: pull on server start (this server's own switches are never touched).
-            if (Config != null && Config.SharedSettingsEnabled)
+            if (Config != null)
             {
-                (bool pulled, string pullMessage) = SharedSettingsManager.Pull("server start");
-                if (!pulled) Log.Warn("Shared settings were not pulled at start: " + pullMessage);
-            }
+                SettingsAutoSaver.Start(Config, () => Save(true));
 
-            if (Config != null) SettingsAutoSaver.Start(Config, () => { Save(true); SharedSettingsManager.PushIfAutomatic(); });
+                // Shared settings: when switched on, take the shared values now and keep them in sync live from here on
+                // (this server's own switches are never touched).
+                SharedSettingsManager.Initialize();
+            }
 
             TorchSessionManager sessionManager = Torch.Managers.GetManager<TorchSessionManager>();
             _pluginManager = Torch.Managers.GetManager<PluginManager>();

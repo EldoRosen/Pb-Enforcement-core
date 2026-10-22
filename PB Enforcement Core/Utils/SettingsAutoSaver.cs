@@ -64,6 +64,18 @@ namespace Advanced_PB_Limiter.Utils
         /// <summary>Saves right now if a change is waiting (used when the server shuts down).</summary>
         public static void FlushNow() => Flush();
 
+        /// <summary>
+        /// Raised on every settings change, with the config property's name (or "PrivilegedPlayers" for a change to the
+        /// privileged players). SharedSettingsManager listens to send changes to the other servers.
+        /// </summary>
+        public static event Action<string?>? Changed;
+
+        private static void RaiseChanged(string? propertyName)
+        {
+            try { Changed?.Invoke(propertyName); }
+            catch (Exception e) { Log.Warn(e, "A settings change listener failed."); }
+        }
+
         /// <summary>Asks for a save in a moment (used when a save had to be retried).</summary>
         public static void RequestSave() => Schedule();
 
@@ -102,9 +114,14 @@ namespace Advanced_PB_Limiter.Utils
             // A whole new privileged players list was assigned: watch that one instead.
             if (e.PropertyName == nameof(Advanced_PB_LimiterConfig.PrivilegedPlayers)) WatchPrivilegedPlayers();
             Schedule();
+            RaiseChanged(e.PropertyName);
         }
 
-        private static void OnPrivilegedPlayerChanged(object? sender, PropertyChangedEventArgs e) => Schedule();
+        private static void OnPrivilegedPlayerChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            Schedule();
+            RaiseChanged(nameof(Advanced_PB_LimiterConfig.PrivilegedPlayers));
+        }
 
         private static void OnPrivilegedCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
@@ -125,6 +142,7 @@ namespace Advanced_PB_Limiter.Utils
             }
 
             Schedule();
+            RaiseChanged(nameof(Advanced_PB_LimiterConfig.PrivilegedPlayers));
         }
 
         private static void Hook(PrivilegedPlayer player)

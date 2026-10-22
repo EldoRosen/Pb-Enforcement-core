@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Advanced_PB_Limiter.Settings;
 using Advanced_PB_Limiter.Utils;
@@ -23,9 +24,6 @@ namespace Advanced_PB_Limiter.Manager
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
         private static Advanced_PB_LimiterConfig Config => Advanced_PB_Limiter.Instance!.Config!;
 
-        // Discord allows 6000 characters in total across an embed.
-        internal const int EmbedCharBudget = 5400;
-        internal const int MaxFields = 25;
         private const string DefaultBotName = "PB Enforcement Core";
         private static readonly string[] AllowedHosts = { "discord.com", "discordapp.com", "canary.discord.com", "ptb.discord.com" };
 
@@ -80,96 +78,105 @@ namespace Advanced_PB_Limiter.Manager
                 return (false, NoWebhookMessage);
 
             string sender = string.IsNullOrWhiteSpace(Config.DiscordBotName) ? DefaultBotName : Config.DiscordBotName.Trim();
-            JObject embed = new()
-            {
-                ["title"] = DiscordStyle.Title("Webhook test"),
-                ["description"] = DiscordStyle.Block(
-                    DiscordStyle.Row("Status", "CONNECTED"),
-                    DiscordStyle.Row("Sender", sender),
-                    DiscordStyle.Row("Reports", "ON REQUEST"),
-                    DiscordStyle.Row("Auto alerts", Config.DiscordAutoReportEnabled ? "ON" : "OFF")),
-                ["color"] = DiscordStyle.Indigo,
-                ["timestamp"] = DateTime.UtcNow.ToString("o"),
-                ["footer"] = new JObject { ["text"] = FooterText("Test message") }
-            };
-            return await PostAsync(webhook, WrapPayload(embed)).ConfigureAwait(false);
+            DiscordCard card = new(DiscordStyle.Green);
+            card.Text(DiscordStyle.Header("✅", "Webhook connected") + "\nReports and alerts from this server will appear in this channel.");
+            card.Divider(large: true);
+            card.Text(DiscordStyle.Inline(
+                DiscordStyle.Stat("Sender", Clean(sender)),
+                DiscordStyle.Stat("Full reports", "on request"),
+                DiscordStyle.Stat("Auto alerts", Config.DiscordAutoReportEnabled ? "on" : "off"),
+                DiscordStyle.Stat("Shared settings", Config.SharedSettingsEnabled ? "live" : "off")));
+            return await PostAsync(webhook, WrapPayload(card, DiscordStyle.Footer("Test message"))).ConfigureAwait(false);
         }
-
-        internal static string FooterText(string tail) =>
-            $"PB ENFORCEMENT CORE V{Advanced_PB_Limiter.Instance?.VersionText} // {tail.ToUpperInvariant()}";
 
         private static JObject BuildOffencePayload(List<PlayerReport> offenders, int trackedPlayers, int minOffences)
         {
             int totalOffences = offenders.Sum(p => p.TotalOffences);
+            bool clear = offenders.Count == 0;
 
-            string description = offenders.Count == 0
-                ? DiscordStyle.Block(
-                    DiscordStyle.Row("Status", "ALL CLEAR"),
-                    DiscordStyle.Row("Server", "THIS SERVER"),
-                    DiscordStyle.Row("Tracked", $"{trackedPlayers} PLAYER(S)"))
-                : DiscordStyle.Block(
-                    DiscordStyle.Row("Server", "THIS SERVER"),
-                    DiscordStyle.Row("Tracked", $"{trackedPlayers} PLAYER(S)"),
-                    DiscordStyle.Row("Offenders", $"{offenders.Count}  (MIN {minOffences} OFFENCE{(minOffences == 1 ? "" : "S")})"),
-                    DiscordStyle.Row("Offences", totalOffences.ToString()));
+            DiscordCard card = new(clear ? DiscordStyle.Green : DiscordStyle.Red);
+            card.Text(DiscordStyle.Header(clear ? "✅" : "📋", "Offence report", "requested by staff") + "\n" + (clear
+                ? $"All clear: no player has {DiscordStyle.Plural(minOffences, "offence")} or more."
+                : $"Players with at least **{DiscordStyle.Plural(minOffences, "offence")}**, worst first."));
+            card.Divider(large: true);
+            card.Text(DiscordStyle.Inline(
+                DiscordStyle.Stat("Tracked players", trackedPlayers.ToString()),
+                DiscordStyle.Stat("Offenders", offenders.Count.ToString()),
+                DiscordStyle.Stat("Offences", totalOffences.ToString())));
 
-            string title = DiscordStyle.Title("Offence report");
-            int used = title.Length + description.Length + 100; // 100 = footer allowance
-            JArray fields = new();
             int shown = 0;
-
+            bool first = true;
             foreach (PlayerReport player in offenders)
             {
-                if (shown >= MaxFields) break;
-
-                List<string> lines = new();
-                if (player.SteamId != 0) lines.Add(DiscordStyle.Row("Steam", player.SteamId.ToString()));
-                lines.Add(DiscordStyle.Row("Offences", player.TotalOffences.ToString()));
-                lines.Add(DiscordStyle.Row("Blocks", $"{player.GetPBReports.Count}   RECOMPILES {player.TotalRecompiles}"));
-                lines.Add(DiscordStyle.Row("Avg run", $"{player.CombinedRunTimeMSAvg:0.000} MS"));
+                List<string> lines = new()
+                {
+                    DiscordStyle.PlayerHeading(player.PlayerName, player.IsPrivileged),
+                    DiscordStyle.Inline(
+                        DiscordStyle.SteamLink(player.SteamId),
+                        $"**{DiscordStyle.Plural(player.TotalOffences, "offence")}**",
+                        DiscordStyle.Plural(player.GetPBReports.Count, "block"),
+                        DiscordStyle.Plural(player.TotalRecompiles, "recompile"),
+                        $"avg `{player.CombinedRunTimeMSAvg:0.000} ms`")
+                };
 
                 foreach (PBReport pb in player.GetPBReports.Where(b => b.Offences > 0).OrderByDescending(b => b.Offences).Take(3))
-                    lines.Add(DiscordStyle.Bullet($"{pb.GridName} / {pb.BlockName}  x{pb.Offences}"));
+                    lines.Add(DiscordStyle.BlockLine(pb.GridName, pb.BlockName, pb.Offences));
 
-                string name = Truncate(DiscordStyle.FieldName(player.PlayerName, player.IsPrivileged), 256);
-                string body = DiscordStyle.Block(lines.ToArray());
-                if (used + name.Length + body.Length > EmbedCharBudget) break;
+                string text = Truncate(string.Join("\n", lines), 900);
+                if (first)
+                {
+                    if (!card.Fits(text, withDivider: true)) break;
+                    card.Divider(large: true);
+                    card.Text(text);
+                    first = false;
+                }
+                else if (!card.TryAdd(text)) break;
 
-                used += name.Length + body.Length;
-                fields.Add(new JObject { ["name"] = name, ["value"] = body, ["inline"] = false });
                 shown++;
             }
 
-            string tail = offenders.Count > shown ? $"+{offenders.Count - shown} more player(s) not shown" : "Generated on request";
-
-            JObject embed = new()
-            {
-                ["title"] = title,
-                ["description"] = description,
-                ["color"] = offenders.Count == 0 ? DiscordStyle.Green : DiscordStyle.Red,
-                ["timestamp"] = DateTime.UtcNow.ToString("o"),
-                ["footer"] = new JObject { ["text"] = FooterText(tail) }
-            };
-            if (fields.Count > 0) embed["fields"] = fields;
-
-            return WrapPayload(embed);
+            string? tail = offenders.Count > shown ? $"+{offenders.Count - shown} more not shown" : null;
+            return WrapPayload(card, DiscordStyle.Footer(tail));
         }
 
-        internal static JObject WrapPayload(JObject embed)
+        private static readonly Regex ReservedNameWords = new("discord|clyde", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>
+        /// The message itself: sender name "Bot · Server" (so the server shows in notifications too), no pings, and the
+        /// card as components v2.
+        /// </summary>
+        internal static JObject WrapPayload(DiscordCard card, string footer)
         {
-            string name = string.IsNullOrWhiteSpace(Config.DiscordBotName) ? DefaultBotName : Truncate(Config.DiscordBotName.Trim(), 80);
+            string bot = string.IsNullOrWhiteSpace(Config.DiscordBotName) ? DefaultBotName : Config.DiscordBotName.Trim();
+            string name = Truncate($"{bot} · {DiscordStyle.ServerName}", 80);
+            // Discord refuses a webhook name that contains these words.
+            name = ReservedNameWords.Replace(name, m => m.Value.Substring(0, m.Value.Length - 1) + "_");
+
             return new JObject
             {
                 ["username"] = name,
                 // Player and grid names are user controlled: never let them ping anyone.
                 ["allowed_mentions"] = new JObject { ["parse"] = new JArray() },
-                ["embeds"] = new JArray { embed }
+                ["flags"] = ComponentsV2Flag,
+                ["components"] = card.ToComponents(footer)
             };
+        }
+
+        private const int ComponentsV2Flag = 1 << 15;
+
+        /// <summary>A webhook only accepts components when asked with ?with_components=true (any query it already has is kept).</summary>
+        private static Uri WithComponents(Uri webhook)
+        {
+            UriBuilder builder = new(webhook);
+            string query = builder.Query.TrimStart('?');
+            builder.Query = (query.Length == 0 ? "" : query + "&") + "with_components=true";
+            return builder.Uri;
         }
 
         internal static async Task<(bool Success, string Message)> PostAsync(Uri webhook, JObject payload)
         {
             string json = payload.ToString(Formatting.None);
+            webhook = WithComponents(webhook);
 
             for (int attempt = 0; attempt < 2; attempt++)
             {
@@ -196,8 +203,11 @@ namespace Advanced_PB_Limiter.Manager
                         continue;
                     }
 
-                    // Never log the URL itself: it is a secret.
-                    Log.Warn($"Discord webhook request failed with HTTP {status}.");
+                    // Never log the URL itself: it is a secret. Discord's own answer says what was wrong with the message.
+                    string answer = "";
+                    try { answer = Truncate(await response.Content.ReadAsStringAsync().ConfigureAwait(false), 500); }
+                    catch { /* no answer to show */ }
+                    Log.Warn($"Discord webhook request failed with HTTP {status}. {answer}");
                     string reason = response.StatusCode switch
                     {
                         HttpStatusCode.NotFound => "the webhook no longer exists (404)",
@@ -232,11 +242,14 @@ namespace Advanced_PB_Limiter.Manager
             StringBuilder sb = new(text!.Length + 8);
             foreach (char c in text)
             {
-                if (c is '\\' or '*' or '_' or '~' or '`' or '|' or '>') sb.Append('\\');
+                if (c is '\\' or '*' or '_' or '~' or '`' or '|' or '>' or '[' or ']' or '#' or '<' or '@') sb.Append('\\');
                 sb.Append(c);
             }
             return sb.ToString();
         }
+
+        /// <summary>Text for inside a `code` span: backticks and line breaks removed.</summary>
+        internal static string Clean(string? text) => DiscordStyle.Clean(text);
 
         internal static string Truncate(string text, int max)
         {

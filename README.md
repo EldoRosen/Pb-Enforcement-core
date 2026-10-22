@@ -1,4 +1,4 @@
-﻿# PB Enforcement Core (v3.1.3)  
+﻿# PB Enforcement Core (v3.1.4)  
 
 ## Programmable block runtime and memory limiter for Torch (originally Advanced PB Limiter, a full replacement for the PB Limiter by HaE).  
 
@@ -12,7 +12,7 @@ The warning, punishment and "slowed down" messages players receive, and the chat
 The first time this version starts, the plugin switches itself **off** once so you can review the settings before it limits anything (an orange banner offers **Turn on now**). Every setting change, including privileged players, is saved to `PB_Enforcement.cfg` automatically a moment after it is made.
 
 ### Shared settings
-Settings can be shared between servers through a local SQLite database (default `C:/PBLimiter/settings.db`, chosen in **Main Settings > Shared Settings**). Servers pull the shared settings when they start and when the settings window opens; changes can be pushed automatically. Enable, the Discord webhook and the sharing settings themselves are never shared.
+Settings can be shared between servers through a local SQLite database (default `C:/PBLimiter/settings.db`, chosen in **Main Settings > Shared Settings**). Sharing is live: a change made on one server reaches all the others within a few seconds, and the Shared Settings tab shows which servers are connected. Enable, the Discord webhook and server name, and the sharing settings themselves are never shared.
 
 ### Manual
 See [MANUAL.md](MANUAL.md) for installation, how the plugin works, every setting and command, and a basic setup example.
@@ -37,7 +37,7 @@ The limiter is built to leave players' scripts alone unless they hurt the server
 Block known-bad scripts from running on your servers. Add them in **Main Settings > Script Blacklist**, or in game with `!PB BlacklistScript <block entity id>` (blocks that exact script by fingerprint) or `!PB BlacklistSignature "<unique text>"` (blocks any script containing that text, so it survives script updates). Blocked blocks are switched off and the owner receives a configurable message. Use `!PB ListBlacklist`, `!PB UnblacklistScript <name>` `!PB ScriptFingerprint <block id>`, `!PB TopScripts [count]` (the heaviest scripts with their block ids) and `!PB TestBlacklist <block id>` (explains why a block is or is not blocked) to manage and check the list.
 
 ### Discord offence reports
-Open the **Discord** tab, paste a channel webhook, and use the buttons, or run `!PB SendOffenceReport`. `!PB TestDiscordWebhook` sends a test message. The same tab can also post **automatic alerts** when a player reaches a set number of offences within a time window (with a per-player cooldown, and an option to always alert when a block is punished). Reports are sent only on request.
+Open the **Discord** tab, paste a channel webhook, and use the buttons, or run `!PB SendOffenceReport`. `!PB TestDiscordWebhook` sends a test message. Set a **Server name** so you can tell servers apart when several post to the same channel. The same tab can also post **automatic alerts** when a player reaches a set number of offences within a time window (with a per-player cooldown, and an option to always alert when a block is punished). Reports are sent only on request.
 
 ### Features  
 - Realtime time tracking only.

@@ -1,6 +1,6 @@
 ﻿# PB Enforcement Core: Manual
 
-**Version 3.1.3.** Plugin file name: `PB Enforcement Core.zip`. Plugin revamped by Eldo Rosen, The Destiny Universe, based on the original code by SentorX.
+**Version 3.1.4.** Plugin file name: `PB Enforcement Core.zip`. Plugin revamped by Eldo Rosen, The Destiny Universe, based on the original code by SentorX.
 
 A Torch plugin for Space Engineers dedicated servers. It watches how much server time every programmable block (PB) uses and steps in only when a script hurts the server.
 
@@ -68,7 +68,17 @@ New-Item -ItemType Junction -Path TorchBinaries -Target "C:\Path\To\Torch"
 
 Check that both links work: `dir GameBinaries\Sandbox.Game.dll` and `dir TorchBinaries\Torch.dll` must both show a file. If either says "cannot find", the link points at the wrong folder.
 
-**Step 4: build.** Run this in the same PowerShell window (it is one command; the leading `&` is needed because the path contains spaces):
+**Step 4: build.** The easy way: double-click **`Build.bat`**. The first time, it asks for your **Torch folder** (the one with `Torch.Server.exe`; you can drag the folder into the window). It remembers it in `torch-path.txt`, so step 3 is done for you: it makes the `GameBinaries` and `TorchBinaries` links itself (game files from `<Torch>\DedicatedServer64`; if they are somewhere else it asks). It then finds MSBuild, builds the Release version, writes the full output to `build.log`, and tells you where the zip is. If it works, skip to step 5.
+
+From a command prompt you can also run:
+
+| Command | Effect |
+|---|---|
+| `Build.bat "D:\Servers\Torch"` | Use this Torch folder (and remember it) |
+| `Build.bat change` | Ask for the Torch folder again |
+| `Build.bat debug` | Debug build instead of Release |
+
+To build by hand instead, run this in the same PowerShell window (it is one command; the leading `&` is needed because the path contains spaces):
 
 ```
 & "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe" "PB Enforcement Core.csproj" /p:Configuration=Release /p:Platform=x64
@@ -108,8 +118,8 @@ When you change the code and want a new version number, change it in these place
 
 | File | What to change |
 |---|---|
-| `manifest.xml` | `<Version>v3.0.4</Version>` |
-| `PB Enforcement Core\Properties\AssemblyInfo.cs` | `AssemblyVersion` and `AssemblyFileVersion` (for example `3.0.4.0`) |
+| `manifest.xml` | `<Version>v3.1.4</Version>` |
+| `PB Enforcement Core\Properties\AssemblyInfo.cs` | `AssemblyVersion` and `AssemblyFileVersion` (for example `3.1.4.0`) |
 | `README.md`, `MANUAL.md` | The version text at the top |
 | `TODO.md` | Add a line describing the change |
 
@@ -329,7 +339,9 @@ Blocked blocks are switched off, not destroyed, and keep being switched off if t
 3. **Full report:** the **Send offence report** button or `!PB SendOffenceReport` posts the worst offenders (players with at least the number of offences set in "Only list players with at least this many offences").
 4. **Automatic alerts:** tick **Send automatic offence alerts** and set the trigger, for example *3 offences within 10 minutes*, a cooldown (default 30 minutes), and whether a punished block always raises an alert. Each alert shows the player, offence counts, punishments and the block ids, so you can act with `!PB BlacklistScript <id>`.
 
-**How the messages look.** Discord does not allow a webhook to choose its own font, so the messages are styled with what Discord does allow: capital-letter headings (`PB ENFORCEMENT CORE // OFFENCE REPORT`), fixed-width blocks with aligned columns for the numbers, and the same colours as the plugin window (red for offenders, green for all clear, orange for automatic alerts, indigo for tests). Every message ends with the plugin name and version.
+**Server name.** Every message shows the server it came from at the top, and again in the footer. Set it in **Server name**; leave it empty to use the dedicated server's own name. It is never shared, so each server keeps its own name even when several servers share settings and post to one channel.
+
+**How the messages look.** Messages use Discord's newer card layout (components v2). Each message is one card with a coloured edge: a heading (📋 offence report, 🚨 automatic alert, ✅ test / all clear) with the server name under it, a line of key numbers, then one section per player, separated by dividers: the player's name as a sub-heading (⭐ for privileged players), a link to their Steam profile, their offence count, and their worst blocks as a list (`grid › block ×offences`, plus the block ID on alerts for `!PB BlacklistScript`). The footer shows the plugin version, the server and the time, which each reader sees in their own time zone. The sender name is "*Sender name* · *Server name*", so the server also shows in notifications. Colours: red for offenders, green for all clear and tests, orange for automatic alerts. One message holds about 10 to 15 players (Discord's limit); the footer says how many more were left out.
 
 The webhook URL is kept private: it is not written to the log, and alerts cannot ping anyone.
 
@@ -339,18 +351,30 @@ The webhook URL is kept private: it is not written to the log, and alerts cannot
 
 If you run several servers, you can keep one set of settings. The settings live in a local SQLite database file (default `C:/PBLimiter/settings.db`, set in **Main Settings > Shared Settings**).
 
-1. On the server whose settings you want to share: open **Main Settings > Shared Settings**, tick **Share settings between servers**, check the database file path, and press **Push now**.
-2. On every other server: tick **Share settings between servers**, use the same database file, and press **Pull now** (or just restart it).
-3. From then on, each server **pulls** the shared settings when it starts and whenever its settings window opens. With **Push every change to the database automatically** ticked, any change you make on one server is written to the database too, and the others pick it up the next time they start or open their settings window.
+Sharing is **live**: a change made on one server shows up on all the others within a few seconds, with no restart and no button to press.
+
+1. On the server whose settings you want to share: open **Main Settings > Shared Settings**, check the database file path, and tick **Share settings between servers (live)**. The database is new and empty, so this server's settings go into it.
+2. On every other server: use the same database file and tick the same box. Each of them first takes the settings already in the database, then joins in.
+3. From then on, any change on any server (a box, a tick, a privileged player, the script blacklist, or a chat command that changes a setting) is sent to the others about a second after you stop typing. Each server checks the database every 3 seconds.
+
+The box under the tick boxes shows the live status: 🟢 connected, which servers are connected right now (each server reports in every 30 seconds), and the last change received and from which server. 🟠 or 🔴 means a problem, with the reason.
+
+Two tick boxes let you make a server send-only or receive-only:
+- **Send changes made on this server to the other servers straight away.** Off: changes made here stay on this server (until you press **Push now**).
+- **Apply changes made on the other servers straight away.** Off: this server ignores the others' changes (until you press **Pull now**). Ticking it again takes in what was missed.
+
+How it works: the config raises a change notification (INotifyPropertyChanged, written by hand) for every setting that really changes. That notification saves the file and queues the change for the other servers. Values received from another server are not sent back, and a change you made here that is not sent yet is never overwritten by an incoming one.
 
 **What is shared:** all limits and options, the chat messages, the privileged players and the script blacklist.
-**What is never shared** (it belongs to one server): **Enable**, the **Discord webhook**, the staff-commands switch, and the sharing settings themselves. So pulling can never switch a server on or off.
+**What is never shared** (it belongs to one server): **Enable**, the **Discord webhook** and **server name**, the staff-commands switch, and the sharing settings themselves. So pulling can never switch a server on or off.
 
 Good to know:
-- The newest push wins. A pull replaces this server's shared settings with what is in the database.
+- If two servers change the same setting within the same few seconds, the last one written wins, on every server.
+- **Push now** writes every shared setting of this server to the database; **Pull now** takes every shared setting from it. Both work even while sharing is off.
+- All servers must run 3.1.4 or newer. A database made by an older version is upgraded on its own, but older servers do not take part in live sharing.
 - The database must be on a drive every server can reach on the same machine; do not put it on a network share.
 - It uses the SQLite library that comes with Windows 10 and Windows Server 2016 or newer, so nothing else needs installing.
-- The database is a normal SQLite file. Each setting is one row with the time and the server that last wrote it.
+- The database is a normal SQLite file. Each setting is one row with its value, a revision number, the time and the server that last wrote it; the `servers` table lists the servers and when each last reported in.
 
 ---
 
